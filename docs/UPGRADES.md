@@ -32,9 +32,9 @@ Effort = suggested reasoning effort if built as a step (model stays Opus 5.5).
 ## App & performance
 | # | Upgrade | Why | Effort |
 |---|---|---|---|
-| 16 | 🟡 auto-update built (needs the GitHub repo for its feed); code signing not done (needs a certificate) — **Auto-update** from GitHub Releases + code signing | No SmartScreen warning, updates by themselves | medium |
+| 16 | 🟡 auto-update ✅ (0.2.0 released on GitHub, feed built in, signature verified); code signing not done (needs a certificate) — **Auto-update** from GitHub Releases + code signing | No SmartScreen warning, updates by themselves | medium |
 | 17 | ✅ done — Download the Japanese dictionary only when a Japanese song plays | exe 55 MB → ~10 MB | medium |
 | 18 | ✅ done — Battery saver: lower frame rate on battery, pause when the window is covered | Less CPU / GPU | low |
 | 19 | ✅ done — OBS / stream overlay: local web page or WebSocket with the current line | Streamers can show lyrics | medium |
 | 20 | ✅ done — Settings UI in more languages; accessibility (screen reader, high contrast) | Reach more people | medium |
-| 21 | 🟡 code done, never compiled for macOS / Linux yet (CI runs once the GitHub repo exists) — macOS / Linux builds (MediaRemote / MPRIS instead of Windows media controls) | Other platforms | high |
+| 21 | ✅ builds on GitHub CI for macOS (dmg) and Linux (deb, AppImage); not tried on a real Mac / Linux PC — macOS / Linux builds (MediaRemote / MPRIS instead of Windows media controls) | Other platforms | high |

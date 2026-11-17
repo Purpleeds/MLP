@@ -30,7 +30,7 @@ A small always-on-top window that shows time-synced lyrics for whatever Spotify 
 
 ## Install
 
-Download `MLP_x.y.z_x64-setup.exe` from Releases and run it (no admin needed). Windows 11 includes the WebView2 runtime the app uses.
+Download `MLP_x.y.z_x64-setup.exe` from [Releases](https://github.com/Purpleeds/MLP/releases/latest) and run it (no admin needed). Windows 11 includes the WebView2 runtime the app uses. The installer isn't code-signed yet, so SmartScreen may warn: *More info → Run anyway*. From 0.2.0 on, MLP checks for updates once a day and installs them from Settings → General → Updates.
 
 Windows hides new tray icons under the **^** arrow near the clock — drag the MLP icon onto the taskbar to keep it visible.
 
