@@ -35,7 +35,11 @@ pub struct TuneDefault {
     pub prior_per_sec: f32,
     pub prior_tol_ms: f64,
 }
-pub const TUNE_DEFAULT: TuneDefault = TuneDefault { star_logp: crate::ctc::STAR_LOGP, blank_penalty: 0.0, prior_per_sec: 0.0, prior_tol_ms: 500.0 };
+/// blank_penalty −1.15: with free blanks a line's letters spread over the whole window and lines
+/// landed ~2.5 s early on real songs; lines within 0.2 s with ±5 s windows went from 5/62 → 56/62
+/// (晴天) and 2/42 → 32/42 (Super Shy). −0.75 and ≤ −2 both fail, so keep it near the star's −1.
+/// The position prior is available but didn't add anything on top (off by default).
+pub const TUNE_DEFAULT: TuneDefault = TuneDefault { star_logp: crate::ctc::STAR_LOGP, blank_penalty: -1.15, prior_per_sec: 0.0, prior_tol_ms: 500.0 };
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

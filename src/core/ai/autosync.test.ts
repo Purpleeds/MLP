@@ -66,8 +66,11 @@ describe("auto-sync", () => {
     const fe = fitMap(e2e);
     expect(fe.a).toBeGreaterThan(1.02);
     expect(Math.abs(mapTime(fe, 15_138) - 17_095)).toBeLessThan(120); // the 5th line, not aligned yet
-    // One anchor: offset only.
-    expect(mapTime(fitMap([{ exp: 10_000, act: 11_500 }]), 30_000)).toBe(31_500);
+    // One anchor never moves the song (it may be a wrong match); two that agree do.
+    expect(mapTime(fitMap([{ exp: 10_000, act: 11_500 }]), 30_000)).toBe(30_000);
+    expect(mapTime(fitMap([{ exp: 10_000, act: 11_500 }, { exp: 14_000, act: 15_500 }]), 30_000)).toBe(31_500);
+    // Two that disagree: still nothing moves.
+    expect(mapTime(fitMap([{ exp: 10_000, act: 11_500 }, { exp: 14_000, act: 9_000 }]), 30_000)).toBe(30_000);
     // A section cut out of the recording: lines after it follow their own neighbours.
     const cut = [0, 1, 2, 3, 4, 5].map((i) => ({ exp: 10_000 + i * 6_000, act: 10_000 + i * 6_000 - (i >= 3 ? 8_000 : 0) }));
     expect(mapTime(fitMap(cut), 46_000)).toBeCloseTo(38_000, -2);
@@ -90,12 +93,12 @@ describe("auto-sync", () => {
     const ls = syncLines(ly, null);
     const tl = buildTimeline(ly);
     const truth = (t: number) => t + 1_200;
-    const fixes: Record<number, LineFix> = { 0: toFix(ls[0], sing(ls[0], truth))! };
+    const fixes: Record<number, LineFix> = { 0: toFix(ls[0], sing(ls[0], truth))!, 1: toFix(ls[1], sing(ls[1], truth))! };
     const out = applySync(tl, ly, ls, fixes, fitMap(anchorsOf(ls, fixes)));
     expect(out.lines[0].start).toBe(11_200);
     expect(out.lines[0].exact).toBe(true);
     expect(out.lines[0].words[1].start).toBe(Math.round(fixes[0].words[1]![0]));
-    // Unaligned line 4 moves by the same 1.2 s.
+    // Unaligned line 4 moves by the same 1.2 s (two agreeing anchors).
     expect(out.lines[4].start).toBe(tl.lines[4].start + 1_200);
     // The original timeline is untouched.
     expect(tl.lines[0].start).toBe(10_000);

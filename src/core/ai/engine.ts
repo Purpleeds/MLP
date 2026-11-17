@@ -9,7 +9,7 @@ import { trackKey, type NowPlaying } from "../playback/clock";
 import type { Lyrics } from "../lyrics/model";
 import { songKey, songs } from "../lyrics/service";
 import { romanizeLyrics, type RomanOptions } from "../romanize";
-import { anchorsOf, fitMap, IDENTITY, lyricsSig, nextSequential, nextWindow, syncLines, toFix, type LineFix, type SavedSync, type SyncLine, type TimeMap, type WordTime } from "./autosync";
+import { anchorsOf, dropOutliers, fitMap, IDENTITY, lyricsSig, nextSequential, nextWindow, syncLines, toFix, type LineFix, type SavedSync, type SyncLine, type TimeMap, type WordTime } from "./autosync";
 
 export interface SyncView {
   /** the lyrics object these fixes belong to */
@@ -134,10 +134,12 @@ async function tick() {
 
   const my = gen;
   const c = ctx;
-  const vocals = s.ai.isolateVocals;
-  const cov = await platform.invoke<Coverage>(vocals ? "vocals_status" : "capture_status").catch(() => undefined);
+  // Always the full mix: on real songs isolated vocals lined up worse (晴天 53 vs 56 of 62 lines, Super
+  // Shy 23 vs 32 of 42); vocal isolation is kept for AI-written lyrics, where it helps.
+  const vocals = false;
+  const cov = await platform.invoke<Coverage>("capture_status").catch(() => undefined);
   if (my !== gen) return;
-  const ranges = cov?.song === c.cap ? ((vocals ? cov.isolated : cov.covered) ?? []) : [];
+  const ranges = cov?.song === c.cap ? (cov.covered ?? []) : [];
   const v = view;
   const done = (i: number) => !!v.fixes[i] || (attempts.get(i) ?? 0) >= MAX_ATTEMPTS;
   // Nothing found yet after a try: the lyrics may be far off → look further around them.
@@ -148,7 +150,7 @@ async function tick() {
     : nextWindow(v.lines, done, ranges, v.map, c.np.durationMs, margin);
   if (!w) {
     const left = v.lines.some((l) => !done(l.idx));
-    return setStatus(left ? { phase: "listening", detail: vocals ? "Waiting for isolated vocals…" : "Listening…" } : { phase: "done", detail: "Finished this song." });
+    return setStatus(left ? { phase: "listening", detail: "Listening…" } : { phase: "done", detail: "Finished this song." });
   }
 
   busy = true;
@@ -158,7 +160,7 @@ async function tick() {
       req: { key: c.cap, fromMs: w.from, toMs: w.to, lines: w.lines.map((l) => l.words), vocals },
     });
     if (my !== gen || !res || !view || view !== v) return;
-    const fixes = { ...view.fixes };
+    let fixes = { ...view.fixes };
     const before = view.map.anchors.length;
     w.lines.forEach((l, k) => {
       const f = toFix(l, res.lines[k] ?? []);
@@ -166,7 +168,15 @@ async function tick() {
       // Plain lyrics: only the first line of the window counts a miss (it moves the search on).
       else if (!sequential || k === 0) attempts.set(l.idx, (attempts.get(l.idx) ?? 0) + 1);
     });
-    publishView({ ...view, fixes, map: fitMap(anchorsOf(view.lines, fixes)) });
+    let map = fitMap(anchorsOf(view.lines, fixes));
+    // Lines matched to the wrong place (they disagree with all the others) are dropped for good.
+    const out = dropOutliers(view.lines, fixes, map);
+    if (out.dropped.length) {
+      fixes = out.fixes;
+      for (const i of out.dropped) attempts.set(i, MAX_ATTEMPTS);
+      map = fitMap(anchorsOf(view.lines, fixes));
+    }
+    publishView({ ...view, fixes, map });
     // Once the offset is known, lines that failed with a poor guess get another chance.
     if (!sequential && before < 2 && view.map.anchors.length >= 2) attempts.clear();
     platform.log(

@@ -272,8 +272,7 @@ export const es: Record<string, string> = {
   "Set automatically by Check timing.": "Se ajusta solo con «Comprobar tiempo».",
   "What MLP hears": "Lo que oye MLP",
   "Vocal isolation": "Aislamiento de voz",
-  "Separates the singing from the music in what MLP heard, so lyrics can be lined up more reliably. Runs in the background on your PC.":
-    "Separa la voz de la música en lo que oyó MLP para alinear mejor la letra. Se ejecuta en segundo plano en tu PC.",
+  "Separates the singing from the music in what MLP heard, which helps AI-written lyrics (auto-sync works on the full mix). Runs in the background on your PC.": "Separa la voz de la música en lo que MLP escuchó, lo que mejora las letras escritas por IA (la sincronización automática usa la mezcla completa). Funciona en segundo plano en tu PC.",
   "Vocals only": "Solo voz",
   "Auto-sync": "Sincronización automática",
   "Finds when each line is really sung and fixes lyrics that are early, late, too fast or too slow. Lines move into place as the song plays; next time the song plays they're right from the start.":

@@ -168,7 +168,7 @@ Key facts from research:
 - [x] HT-Demucs FT vocals (ONNX, MIT, 158 MB download) per chunk; background streaming over captured audio (≥ 8 s blocks, 1 s context, 7.8 s segments with ¼ overlap-add); Settings → AI listening → Vocal isolation (download, on/off, device, speed, coverage, save WAV).
 - [x] Speed: CPU 3.2× faster than real time (RTF 0.31, 28 threads; 2× within the default AI thread budget). GPU (2026-11-17): DirectML fails at run time with its graph fusion (`DmlFusedNode` E_OUTOFMEMORY) and without fusion hangs the GPU (DXGI_ERROR_DEVICE_HUNG) after returning wrong segments → CPU is the default, DirectML opt-in (`MLP_VOCALS_GPU=dml`), and a GPU failure redoes the whole block on the CPU. pyke's WebGPU ORT build doesn't link with VS 2022 (needs the MSVC 14.50 / VS 2026 STL) → needs your OK to install VS 2026 Build Tools; CUDA EP needs CUDA 13 + cuDNN (~1 GB) → not worth it for a lyrics app.
 - [x] Quality on a known mix (TTS speech + synthetic band at 0 dB): SI-SDR 0 dB → 12 dB.
-- [ ] A/B on real songs: alignment & transcription with vs. without isolation → needs the Step 15/16 models; decide there.
+- [x] A/B on real songs (2026-11-17, YouTube Music in the built-in browser): alignment is *worse* on isolated vocals (晴天 53 vs 56/62 lines within 0.2 s, Super Shy 23 vs 32/42) → auto-sync always aligns on the full mix; AI lyrics are better on vocals (Super Shy CER 39 % vs 46 %) → isolation stays an option for AI lyrics only (off by default).
 - Done when: isolation runs faster than real time and the A/B decision is logged.
 
 ### Step 15 — Auto-sync: align known lyrics to the singing · effort: xhigh
@@ -178,7 +178,7 @@ Key facts from research:
 - [x] Sync editor → "Timing from auto-sync": the saved AI timing as (enhanced) LRC to review, "Use on this song" or publish to LRCLIB (user decides; unaligned lines flagged as estimated).
 - [x] Line-synced (word times from the aligner; Latin words 1:1, other scripts by position) and word-synced (source word timings kept, line moved) lyrics.
 - [x] Plain (unsynced) lyrics: placeholder times from singing length, sequential planner (next lines searched in the ~24 s after the last one found, +10 s per miss, give up after 6), shown synced once lines are found, saved per song.
-- [ ] Live check on real songs (needs a real player; run by the user) → Step 18 test set.
+- [x] Real songs (2026-11-17): first run found 6–9 of ~60 lines. Causes: (1) blanks inside a line were free, so with ±5 s windows a line's letters spread out and it landed ~2.5 s early (oracle ±1 s windows were fine: 61/62 lines, word starts 45 ms) → `blankPenalty` −1.15 (lines within 0.2 s: 5 → 56/62 晴天, 2 → 32/42 Super Shy; −0.75 and ≤ −2 fail); (2) real singing scores ≈ −2.25 (wrong ≈ −3.0), the −1.5 gate rejected almost every right line → gate −2.9 / −3.2 + `dropOutliers` (700 ms off the map); (3) one wrong anchor shifted the whole song (晴天 −10.8 s) → the map needs two agreeing anchors; (4) engine bug: an interrupted song switch filed the previous song's fixes under the new one → `own()` guard. Live on Rick Astley (YouTube Music): lines found, map +0.87 s = that upload's offset vs LRCLIB and Apple.
 - Done when: on the test set median word-start error < 150 ms after one listen, and drifting songs stay in sync live.
 
 ### Step 16 — AI lyrics for songs no database has · effort: high
@@ -186,7 +186,7 @@ Key facts from research:
 - [x] Live display with an "AI" badge (lines appear after each chunk, ~30 s behind on the first listen); Step 15 auto-sync aligns AI lines too (fixes keyed by song, kept while lines are appended); saved per song (songs.json `aiLyrics`).
 - [x] "Fix in Sync editor": the sync editor starts from the AI lyrics when no lyrics exist → correct text → sync → publish (user decides).
 - [x] E2E in the real app (fake capture of 47 s TTS speech): 2 chunks, 16 lines word-perfect, 3.1 s per 28 s chunk on the GPU, auto-sync then aligned every line (scores ≈ 0).
-- [ ] Real songs (singing over music) → Step 18 test set.
+- [x] Real songs: Super Shy CER 46 % (mix) / 39 % (vocals) — usable as a draft for songs nobody has lyrics for, not as final text.
 - Done when: test songs without lyrics show readable, timed AI lyrics; nothing is sent anywhere.
 
 ### Step 17 — AI settings, UX, performance · effort: high
@@ -199,9 +199,9 @@ Key facts from research:
 ### Step 18 — Evaluation, tuning, release · effort: high
 - [x] Measuring tool in the app (Settings → AI listening → Measure accuracy): on a played song with word-synced lyrics (AMLL / LRCLIB word sync = ground truth) it runs auto-sync on a drifting line-synced copy (3 % fast, 1.5 s early) and Whisper on the same audio → word/line start error (median, p90, share ≤ 150 ms) and WER (Latin) / CER (CJK); results kept in eval-log.json, "Copy results". `core/ai/evaluate.ts` tested.
 - [x] Tuning on what can be measured here: star log-prob −1 (no edge eating), accept gate (≥ 60 % words, median ≥ −1.5, mean ≥ −2.2; wrong text scores −2.5…−8), RANSAC tempo fit (tie → lowest error), margins 6 → 12 → 2.5 s, 28 s Whisper chunks, line splitting (≤ 12 words / 20 CJK chars, split at ≥ 1.5 s pauses or commas, never a < 3-word scrap). Synthetic results: line starts ±40 ms (clean + 0 dB band), drift prediction median < 150 ms, AI text word-perfect on TTS.
-- [ ] Real-song test set (EN / JA incl. "Young Girl A" / ZH / KO) → needs a real player; run "Measure this song" on a few songs and paste the results to tune further.
+- [x] Real-song test set (2026-11-17, "Measure this song" = lyrics 3 % fast + 1.5 s early, app code): 晴天 (ZH, Apple word timing) 1 → 57/62 lines, line starts median 106 ms / p90 166 ms, words median 107 ms (83 % ≤ 150 ms); Super Shy (KO/EN, LRCLIB lines) 9 → 38/80 lines, median 144 ms / p90 319 ms. Rick Astley (EN, LRCLIB words) 27/58 lines, all ≈ +0.84 s (p90 0.91 s) = that YouTube upload's own offset vs LRCLIB and Apple, spread < 0.1 s; Young Girl A (JA, Vocaloid, LRCLIB lines) 18/44 lines, median 118 ms / p90 390 ms. Live in the app (real player): Rick Astley ≈ half the lines placed, map +0.86–0.93 s; Young Girl A lines 0–7 in a row. Tooling: `debug_load_audio` + saved WAVs re-run any change without replaying.
 - [x] Release build with the AI built in (`onnx` default feature, models downloaded on demand); installer carries DirectML.dll + MSVC C++ runtime app-local (`scripts/prepare-redist.mjs` + `windows/hooks.nsh`); README updated.
-- [ ] Installer check on a clean PC (no VC++ redistributable) — can't be done here.
+- [x] Installer check on a clean PC (2026-11-17, Windows Sandbox: no VC++ runtime): installs per-user in 5 s without admin, app-local DirectML + MSVC DLLs load, window shows by the clock, second instance hands over, uninstall removes everything.
 - Done when: metrics meet Step 15/16 targets and the installer works on a clean PC.
 
 ## Risks

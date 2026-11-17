@@ -58,7 +58,10 @@ export interface LineFix {
 }
 
 /** Thresholds (tuned on TTS lines in speech and in a synthetic band; Step 18 tunes on songs). */
-export const ACCEPT = { minFound: 0.6, minMedian: -1.5, minMean: -2.2 };
+// Calibrated on real songs (2026-11-17, 晴天 / Super Shy): correctly placed lines score about −2.25
+// (p10 −2.9), wrong ones about −3.0, so scores only pre-filter; agreement with the time map does the
+// rest (two agreeing anchors before the map moves anything, outliers dropped by `dropOutliers`).
+export const ACCEPT = { minFound: 0.6, minMedian: -2.9, minMean: -3.2 };
 
 const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -93,9 +96,11 @@ export interface TimeMap {
   /** offset (ms) */
   b: number;
   anchors: Anchor[];
+  /** anchors that agree with the fit (fewer than 2 = the map moves nothing) */
+  inliers?: number;
 }
 
-export const IDENTITY: TimeMap = { a: 1, b: 0, anchors: [] };
+export const IDENTITY: TimeMap = { a: 1, b: 0, anchors: [], inliers: 0 };
 
 /**
  * Robust fit (RANSAC over anchor pairs ≥ 8 s apart): the tempo/offset line that most anchors agree
@@ -126,9 +131,10 @@ export function fitMap(anchors: Anchor[]): TimeMap {
       const a = (p[j].act - p[i].act) / dx;
       consider(a, p[i].act - a * p[i].exp);
     }
-  // Refine on the inliers.
+  // Refine on the inliers. One line alone never moves the whole song: a single wrong match would
+  // shift every other line with it.
   const pts = best.idx.map((i) => p[i]);
-  if (!pts.length) return { a: 1, b: best.b, anchors: p };
+  if (pts.length < 2) return { a: 1, b: 0, anchors: p, inliers: pts.length };
   const mx = pts.reduce((s, q) => s + q.exp, 0) / pts.length;
   const my = pts.reduce((s, q) => s + q.act, 0) / pts.length;
   const span = pts[pts.length - 1].exp - pts[0].exp;
@@ -138,13 +144,13 @@ export function fitMap(anchors: Anchor[]): TimeMap {
     const v = pts.reduce((s, q) => s + (q.exp - mx) ** 2, 0);
     a = Math.min(1.25, Math.max(0.8, cov / v));
   }
-  return { a, b: my - a * mx, anchors: p };
+  return { a, b: my - a * mx, anchors: p, inliers: pts.length };
 }
 
 /** Expected → sung time: the linear fit plus the local error of the nearest anchors (a cut or added section shifts what follows). */
 export function mapTime(m: TimeMap, t: number): number {
   const base = m.a * t + m.b;
-  if (m.anchors.length < 2) return base;
+  if (m.anchors.length < 2 || (m.inliers ?? 2) < 2) return base;
   const near = m.anchors
     .filter((p) => Math.abs(p.exp - t) <= 45_000)
     .sort((x, y) => Math.abs(x.exp - t) - Math.abs(y.exp - t))
@@ -156,6 +162,24 @@ export function mapTime(m: TimeMap, t: number): number {
 
 export const anchorsOf = (lines: SyncLine[], fixes: Record<number, LineFix>): Anchor[] =>
   lines.filter((l) => fixes[l.idx]).map((l) => ({ exp: l.start, act: fixes[l.idx].start }));
+
+/**
+ * Once the map rests on ≥ 4 anchors, a fix more than `tolMs` away from where the map puts its line
+ * matched the wrong place (a repeated chorus line, an ad-lib): drop it. Returns the kept fixes and the
+ * dropped line indexes; the caller refits the map.
+ */
+export function dropOutliers(lines: SyncLine[], fixes: Record<number, LineFix>, map: TimeMap, tolMs = 700): { fixes: Record<number, LineFix>; dropped: number[] } {
+  if (map.anchors.length < 4) return { fixes, dropped: [] };
+  const kept: Record<number, LineFix> = {};
+  const dropped: number[] = [];
+  for (const l of lines) {
+    const f = fixes[l.idx];
+    if (!f) continue;
+    if (Math.abs(f.start - mapTime(map, l.start)) > tolMs) dropped.push(l.idx);
+    else kept[l.idx] = f;
+  }
+  return dropped.length ? { fixes: kept, dropped } : { fixes, dropped };
+}
 
 // ---------- planning: which lines to align next ----------
 export interface Window {

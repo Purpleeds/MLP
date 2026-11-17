@@ -272,8 +272,7 @@ export const ja: Record<string, string> = {
   "Set automatically by Check timing.": "「タイミングを確認」で自動設定されます。",
   "What MLP hears": "MLP が聴いている音",
   "Vocal isolation": "ボーカル抽出",
-  "Separates the singing from the music in what MLP heard, so lyrics can be lined up more reliably. Runs in the background on your PC.":
-    "聴いた音から歌声だけを分離し、歌詞をより確実に合わせられるようにします。PC 上でバックグラウンド実行。",
+  "Separates the singing from the music in what MLP heard, which helps AI-written lyrics (auto-sync works on the full mix). Runs in the background on your PC.": "MLP が聞いた音から歌声だけを取り出します。AI 歌詞の精度が上がります（自動同期は元の音で行います）。PC 上でバックグラウンド実行。",
   "Vocals only": "ボーカルのみ",
   "Auto-sync": "自動同期",
   "Finds when each line is really sung and fixes lyrics that are early, late, too fast or too slow. Lines move into place as the song plays; next time the song plays they're right from the start.":

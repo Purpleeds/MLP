@@ -140,6 +140,7 @@ pub const STAR_LOGP: f32 = -1.0;
 /// Align several lines that sit somewhere inside a longer stretch of audio. `lines[l][w]` = token
 /// ids of word `w` of line `l` (empty = skipped word). Returns spans per line and word (None for
 /// skipped words), or None if the text can't fit.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn align_lines(logp: &[f32], t_len: usize, v: usize, blank: usize, lines: &[Vec<Vec<usize>>]) -> Option<Vec<Vec<Option<WordSpan>>>> {
     align_lines_with(logp, t_len, v, blank, lines, &Tuning::default())
 }

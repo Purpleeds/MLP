@@ -8,7 +8,7 @@ import { trackKey, type NowPlaying } from "../playback/clock";
 import { loadLyrics } from "../lyrics/service";
 import { createKv } from "../storage/kv";
 import { romanizeLyrics } from "../romanize";
-import { anchorsOf, fitMap, IDENTITY, nextWindow, syncLines, toFix, type LineFix, type WordTime } from "./autosync";
+import { anchorsOf, dropOutliers, fitMap, IDENTITY, nextWindow, syncLines, toFix, type LineFix, type WordTime } from "./autosync";
 import { ALIGN_ROMAN } from "./engine";
 import { errorRate, perturb, timingErrors } from "./evaluate";
 import { filterSegments, nextChunk, segmentsFrom, settle, type WhisperJson } from "./transcribe";
@@ -40,9 +40,12 @@ export async function evaluateSong(np: NowPlaying, progress: (msg: string) => vo
   const reference = await loadLyrics(np);
   if (!reference || (reference.kind !== "word" && reference.kind !== "line")) throw new Error("This song needs synced lyrics to compare with.");
   const cap = trackKey(np);
+  // Auto-sync always aligns on the full mix (like the engine); isolated vocals only feed the AI lyrics.
   const vocals = opts.vocals ?? s.ai.isolateVocals;
-  const cov = await platform.invoke<Coverage>(vocals ? "vocals_status" : "capture_status");
-  const ranges = cov?.song === cap ? ((vocals ? cov.isolated : cov.covered) ?? []) : [];
+  const capCov = await platform.invoke<Coverage>("capture_status");
+  const ranges = capCov?.song === cap ? (capCov.covered ?? []) : [];
+  const vocCov = vocals ? await platform.invoke<Coverage>("vocals_status") : null;
+  const textRanges = vocals ? (vocCov?.song === cap ? (vocCov.isolated ?? []) : []) : ranges;
   const heard = ranges.reduce((a, [x, y]) => a + (y - x), 0);
   const dur = np.durationMs || reference.durationMs;
   if (!dur || heard < dur * 0.5) throw new Error(`Play at least half of the song with listening on first (${Math.round(heard / 1000)} s of ${Math.round(dur / 1000)} s heard).`);
@@ -60,7 +63,7 @@ export async function evaluateSong(np: NowPlaying, progress: (msg: string) => vo
     if (!w) break;
     progress(`Lining up ${Object.keys(fixes).length}/${lines.length} lines…`);
     const res = await platform.invoke<{ lines: (WordTime | null)[][] }>("ai_align", {
-      req: { key: cap, fromMs: w.from, toMs: w.to, lines: w.lines.map((l) => l.words), vocals },
+      req: { key: cap, fromMs: w.from, toMs: w.to, lines: w.lines.map((l) => l.words), vocals: false },
     });
     const before = map.anchors.length;
     w.lines.forEach((l, k) => {
@@ -69,19 +72,25 @@ export async function evaluateSong(np: NowPlaying, progress: (msg: string) => vo
       else attempts.set(l.idx, (attempts.get(l.idx) ?? 0) + 1);
     });
     map = fitMap(anchorsOf(lines, fixes));
+    const out = dropOutliers(lines, fixes, map);
+    for (const i of out.dropped) {
+      delete fixes[i];
+      attempts.set(i, 2);
+    }
+    if (out.dropped.length) map = fitMap(anchorsOf(lines, fixes));
     if (before < 2 && map.anchors.length >= 2) attempts.clear();
   }
   const timing = timingErrors(reference, lines, fixes);
 
   // 2) AI lyrics on the same audio.
   let text: EvalReport["text"] = null;
-  if (withText && ranges.length) {
+  if (withText && textRanges.length) {
     let doneTo = 0;
     const out: string[] = [];
     let lang: string | null = null as string | null;
-    const end = ranges[ranges.length - 1][1];
+    const end = textRanges[textRanges.length - 1][1];
     for (let guard = 0; guard < 60; guard++) {
-      const c = nextChunk(doneTo, ranges, true, dur);
+      const c = nextChunk(doneTo, textRanges, true, dur);
       if (!c) break;
       progress(`Writing lyrics ${Math.round(c.from / 1000)}–${Math.round(c.to / 1000)} s…`);
       const json: WhisperJson | undefined = await platform.invoke<WhisperJson>("ai_transcribe", {
@@ -98,7 +107,7 @@ export async function evaluateSong(np: NowPlaying, progress: (msg: string) => vo
     }
     // Compare with the reference lines inside what was heard.
     const refText = reference.lines
-      .filter((l) => !l.bg && ranges.some(([a, b]) => l.start >= a && l.start < b))
+      .filter((l) => !l.bg && textRanges.some(([a, b]) => l.start >= a && l.start < b))
       .map((l) => l.text)
       .join(" ");
     text = errorRate(refText, out.join(" "));

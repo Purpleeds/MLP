@@ -94,7 +94,6 @@ export function AutoSyncPanel() {
           </div>
         </>
       )}
-      {!s.ai.isolateVocals && s.ai.autoSync && <p className="help">Tip: turn on vocal isolation below — lining up works much better on the singing alone.</p>}
       <div className="inline">
         <button
           className="btn"

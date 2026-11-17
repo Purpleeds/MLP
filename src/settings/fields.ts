@@ -557,7 +557,7 @@ export const SECTIONS: Section[] = [
       },
       {
         title: "Vocal isolation",
-        note: "Separates the singing from the music in what MLP heard, so lyrics can be lined up more reliably. Runs in the background on your PC.",
+        note: "Separates the singing from the music in what MLP heard, which helps AI-written lyrics (auto-sync works on the full mix). Runs in the background on your PC.",
         fields: [{ kind: "custom", id: "vocals", label: "Vocals only" }],
       },
       {
