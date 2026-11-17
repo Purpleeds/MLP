@@ -1,0 +1,915 @@
+/* Window is transparent; the .card is the opaque rounded surface. */
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.card {
+  /* Per-language CJK fallbacks (Han glyph forms differ between languages). */
+  --cjk: "Microsoft YaHei UI", "Yu Gothic UI", "Malgun Gothic";
+  position: relative;
+  box-sizing: border-box;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--pad);
+  border-radius: var(--radius);
+  background: #111014;
+  color: var(--lr-active);
+  font-family: var(--lr-font), var(--cjk), sans-serif;
+  overflow: hidden;
+  cursor: default;
+  -webkit-font-smoothing: antialiased;
+  transition: opacity 0.26s ease;
+}
+/* Auto-hide fade-out right before the window hides. */
+.card.autohiding {
+  opacity: 0 !important;
+}
+:lang(ja) {
+  --cjk: "Yu Gothic UI", "Meiryo UI", "Microsoft YaHei UI";
+}
+:lang(ko) {
+  --cjk: "Malgun Gothic", "Microsoft YaHei UI";
+}
+:lang(zh) {
+  --cjk: "Microsoft YaHei UI", "Microsoft JhengHei UI";
+}
+:lang(ja),
+:lang(ko),
+:lang(zh) {
+  font-family: var(--lr-font), var(--cjk), sans-serif;
+}
+
+/* Mock mode in a normal browser: show the card at a realistic window size. */
+.card.mock {
+  margin: 24px;
+}
+body:has(.card.mock) {
+  background: #6b7280;
+}
+
+/* ---------- background ---------- */
+.bg-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+img.bg-layer.bg-art {
+  inset: -25%;
+  width: 150%;
+  height: 150%;
+  object-fit: cover;
+  opacity: 0.9;
+}
+img.bg-art.spin {
+  animation: bg-spin 60s linear infinite;
+}
+@keyframes bg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- now playing parts ---------- */
+.art {
+  flex: none;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  position: relative;
+}
+.art.empty {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+.art.small {
+  width: 46px;
+  height: 46px;
+}
+.art.tiny {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+}
+.info {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  color: var(--info);
+}
+.info-title {
+  font-weight: 650;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+.info-sub {
+  font-size: 13px;
+  opacity: 0.62;
+}
+.info.big .info-title {
+  font-size: 19px;
+}
+.info.big .info-sub {
+  font-size: 14px;
+}
+.marquee {
+  overflow: hidden;
+  white-space: nowrap;
+}
+.marquee > span {
+  display: inline-block;
+}
+.marquee.moving > span {
+  animation: marquee var(--dur) ease-in-out infinite alternate;
+}
+@keyframes marquee {
+  0%,
+  15% {
+    transform: translateX(0);
+  }
+  85%,
+  100% {
+    transform: translateX(var(--shift));
+  }
+}
+
+.np {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+.progress {
+  position: relative;
+  flex: none;
+  color: var(--info);
+}
+.progress-track {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.22);
+  overflow: hidden;
+}
+.progress-track.seekable {
+  cursor: pointer;
+  padding: 0;
+}
+.progress-track.seekable:hover {
+  height: 6px;
+  margin: -1px 0;
+}
+.progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 2px;
+}
+.progress-times {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 11px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+.controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  flex: none;
+  color: var(--info);
+}
+.controls button {
+  all: unset;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  opacity: 0.85;
+  border-radius: 6px;
+}
+.controls button.main {
+  width: 30px;
+  height: 30px;
+}
+.controls button:hover {
+  opacity: 1;
+}
+.controls button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline-offset: 3px;
+}
+.np .controls {
+  gap: 10px;
+}
+.np .controls button {
+  width: 18px;
+  height: 18px;
+}
+.np .controls button.main {
+  width: 22px;
+  height: 22px;
+}
+
+/* Full mode, wide: Apple Music split */
+.split {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 38%) 1fr;
+  gap: calc(var(--pad) * 1.4);
+}
+.split-side {
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  min-width: 0;
+}
+.art.side-art {
+  width: min(100%, 56cqh);
+  height: auto;
+  border-radius: 10px;
+}
+.split .lyrics-area {
+  margin: calc(var(--pad) * -1) calc(var(--pad) * -1) calc(var(--pad) * -1) 0;
+}
+.split .lr-root {
+  /* lyrics column touches the window edge on the right only */
+}
+
+/* Now playing card ("music profile") */
+.np-card {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+}
+.np-card.row {
+  align-items: stretch;
+}
+.np-card.row .card-art {
+  height: 100%;
+  width: auto;
+  max-width: 45%;
+}
+.np-card.col {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+}
+.np-card.col .card-art {
+  width: min(100%, 60vh);
+  align-self: center;
+}
+.np-card-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Title only */
+.title-row {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.title-text {
+  flex: 1;
+  font-weight: 650;
+  font-size: 15px;
+  color: var(--info);
+}
+
+/* Idle */
+.idle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+.mode-full .idle,
+.mode-lyrics-title .idle,
+.mode-lyrics .idle,
+.mode-custom .idle {
+  align-items: flex-start;
+  flex: none;
+}
+
+/* ---------- lyrics ---------- */
+.lyrics-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0 calc(var(--pad) * -1) calc(var(--pad) * -1);
+}
+.mode-lyrics .lyrics-area,
+.mode-mini .lyrics-area {
+  margin: calc(var(--pad) * -1);
+}
+.lyrics-area.mini .lr-root {
+  top: calc(var(--pad) * 0.6);
+}
+.lr-root {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  font-size: var(--lr-size);
+  font-weight: var(--lr-weight);
+  line-height: var(--lr-lh);
+  letter-spacing: var(--lr-ls);
+  /* explicit side (not `start`), so an Arabic / Hebrew sub-line (dir=auto) stays under its line */
+  text-align: left;
+}
+.lr-list {
+  position: relative;
+  height: 100%;
+}
+.lr-item {
+  position: absolute;
+  top: 0;
+  left: var(--pad);
+  right: var(--pad);
+  transform-origin: left center;
+  will-change: transform;
+  transition: filter 0.45s ease, opacity 0.3s linear;
+}
+.lr-root[data-align="center"] {
+  text-align: center;
+}
+.lr-root[data-align="center"] .lr-item {
+  transform-origin: center center;
+}
+.lr-root[data-align="right"] {
+  text-align: right;
+}
+.lr-root[data-align="right"] .lr-item {
+  transform-origin: right center;
+}
+.blend .lr-item {
+  mix-blend-mode: plus-lighter;
+}
+
+.lr-main {
+  margin: 0;
+  color: var(--lr-inactive);
+  overflow-wrap: break-word;
+}
+.lr-sub {
+  margin: 0.12em 0 0;
+  font-size: 0.56em;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0;
+  color: var(--lr-inactive);
+  transition: color 0.4s ease;
+}
+.lr-trans {
+  margin: 0.14em 0 0;
+  font-size: 0.5em;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0;
+  color: var(--lr-inactive);
+  opacity: 0.9;
+}
+.lr-line.cur .lr-trans {
+  color: color-mix(in srgb, var(--lr-active) 60%, transparent);
+}
+/* Furigana */
+.lr-w ruby {
+  ruby-position: over;
+}
+.lr-w rt {
+  font-size: 0.42em;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+}
+.lr-line.cur .lr-sub {
+  color: color-mix(in srgb, var(--lr-active) 72%, transparent);
+}
+/* Taskbar bar (Upgrade 12): one line, by the clock. */
+.card.mode-bar {
+  --pad: 5px;
+  padding: 4px 12px;
+  border-radius: min(var(--radius), 10px);
+  justify-content: center;
+}
+.mode-bar .lyrics-area {
+  margin: -4px -12px;
+}
+.mode-bar .lr-root {
+  font-size: 17px;
+  inset: 0 12px;
+}
+.mode-bar .lr-main {
+  white-space: nowrap;
+}
+.mode-bar .lr-sub,
+.mode-bar .lr-trans,
+.mode-bar .ai-badge,
+.mode-bar .lr-message-detail {
+  display: none;
+}
+.mode-bar .idle .info-title,
+.mode-bar .lr-message-title {
+  font-size: 13px;
+}
+/* Overlay mode (Upgrade 11): no card, outlined text over games / videos. */
+.card.mode-overlay {
+  background: transparent;
+  padding: 6px;
+  --lr-inactive: rgba(255, 255, 255, 0.85);
+}
+.mode-overlay .lyrics-area {
+  margin: 0;
+}
+.blend.mode-overlay .lr-item {
+  mix-blend-mode: normal; /* nothing of ours behind the text to blend with */
+}
+.mode-overlay .lr-root {
+  /* drop-shadow follows the glyphs, also with the gradient word fill (text-shadow would paint over it) */
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.95)) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.7));
+}
+.mode-overlay.locked .lock-badge,
+.mode-overlay .ai-badge {
+  display: none;
+}
+.overlay-idle {
+  margin: auto;
+  font: 600 13px system-ui, sans-serif;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+}
+/* Accessibility (Upgrade 20) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* Windows high contrast / contrast themes: system colours, plain text, no effects. */
+@media (forced-colors: active) {
+  .card {
+    background: Canvas;
+    color: CanvasText;
+    border: 1px solid CanvasText;
+  }
+  .bg-layer,
+  .ai-badge {
+    display: none;
+  }
+  .lr-root,
+  .mode-overlay .lr-root {
+    filter: none !important;
+  }
+  .lr-line .lr-w,
+  .lr-line .lr-l,
+  .lr-line.live .lr-w:not(.emph),
+  .lr-line.live .lr-l {
+    color: GrayText !important;
+    background: none !important;
+    filter: none !important;
+  }
+  .lr-line.cur .lr-w,
+  .lr-line.cur .lr-l {
+    color: CanvasText !important;
+  }
+  .lr-line {
+    filter: none !important;
+  }
+}
+/* AI status pill (Step 17) */
+.ai-indicator {
+  position: absolute;
+  left: calc(var(--pad) * 0.5);
+  bottom: calc(var(--pad) * 0.4);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font: 600 10.5px/1 system-ui, sans-serif;
+  color: #fff;
+  padding: 4px 8px 4px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.32);
+  opacity: 0.55;
+  transition: opacity 0.2s;
+  pointer-events: auto;
+}
+.ai-indicator:hover,
+.ai-indicator.busy {
+  opacity: 0.9;
+}
+.ai-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7ee0a1;
+}
+.ai-indicator.busy .ai-dot {
+  animation: ai-pulse 1.1s ease-in-out infinite;
+}
+@keyframes ai-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-indicator.busy .ai-dot {
+    animation: none;
+  }
+}
+/* AI-written lyrics (Step 16) */
+.ai-badge {
+  position: absolute;
+  right: calc(var(--pad) * 0.5);
+  bottom: calc(var(--pad) * 0.4);
+  font: 700 10px/1 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: var(--lr-active);
+  background: color-mix(in srgb, var(--lr-active) 14%, transparent);
+  opacity: 0.75;
+  pointer-events: auto;
+  z-index: 3;
+}
+/* Click a line to jump there (Upgrade 9). */
+.lr-root.seekable .lr-line {
+  cursor: pointer;
+}
+.lr-root.seekable .lr-line:not(.cur):hover .lr-main {
+  filter: brightness(1.35);
+}
+/* Duet colours: each singer's sung text in their own colour (people cycle 2/3, 0 = together). */
+.card.voices .lr-line.voice-2,
+.card.voices .lr-line.voice-4 {
+  --lr-active: var(--lr-voice2);
+}
+.card.voices .lr-line.voice-3,
+.card.voices .lr-line.voice-5 {
+  --lr-active: var(--lr-voice3);
+}
+.card.voices .lr-line.voice-0 {
+  --lr-active: var(--lr-voice-group);
+}
+/* Duets: the second singer sits on the opposite side (Apple Music style). */
+.lr-root[data-align="left"] .lr-line.duet {
+  text-align: right;
+  transform-origin: right center;
+}
+.lr-root[data-align="right"] .lr-line.duet {
+  text-align: left;
+  transform-origin: left center;
+}
+.lr-line.bg .lr-main {
+  font-size: calc(var(--lr-bg-scale) * 1em);
+  font-weight: 600;
+}
+.lr-w,
+.lr-l {
+  display: inline-block;
+  white-space: pre;
+}
+.lr-w.bgw {
+  font-size: 0.82em;
+  opacity: 0.85;
+}
+.lr-line:not(.cur) .lr-w,
+.lr-line:not(.cur) .lr-l {
+  transition: transform 0.5s ease;
+}
+
+/* Live line: sung part = active color (fades out via --hl after the line ends). */
+.lr-line.live {
+  --sung: color-mix(in srgb, var(--lr-active) calc(var(--hl, 0) * 100%), var(--lr-inactive));
+}
+.lr-line.live .lr-w:not(.emph),
+.lr-line.live .lr-l {
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--sung) calc((100% + var(--lr-soft)) * var(--p, 0) - var(--lr-soft)),
+    var(--lr-inactive) calc((100% + var(--lr-soft)) * var(--p, 0))
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.lr-line.live.nofill .lr-w {
+  background-image: none;
+  color: var(--sung);
+}
+/* Emoji keep their own colours (the clipped gradient would make them silhouettes); dim until sung. */
+.lr-emoji {
+  /* text-style symbols (♥ without VS16) draw in this colour; colour emoji ignore it */
+  color: var(--lr-active, #fff);
+  -webkit-text-fill-color: var(--lr-active, #fff);
+  opacity: 0.5;
+}
+.lr-line.live .lr-emoji {
+  opacity: calc(0.5 + 0.5 * min(1, var(--p, 0) * 2));
+}
+
+/* Right-to-left lyrics (Arabic, Hebrew): fill runs right to left (Latin runs inside stay LTR), and the
+   line sits on the mirrored side of the window. */
+.lr-line.live .lr-main[dir="rtl"] > .lr-w:not(.emph) {
+  background-image: linear-gradient(
+    270deg,
+    var(--sung) calc((100% + var(--lr-soft)) * var(--p, 0) - var(--lr-soft)),
+    var(--lr-inactive) calc((100% + var(--lr-soft)) * var(--p, 0))
+  );
+}
+.lr-iso {
+  unicode-bidi: isolate;
+}
+.lr-root[data-align="left"] .lr-line.rtl:not(.duet),
+.lr-root[data-align="right"] .lr-line.rtl.duet {
+  text-align: right;
+  transform-origin: right center;
+}
+.lr-root[data-align="right"] .lr-line.rtl:not(.duet),
+.lr-root[data-align="left"] .lr-line.rtl.duet {
+  text-align: left;
+  transform-origin: left center;
+}
+.lr-root.rtl-song[data-align="left"] .lr-dots {
+  justify-content: flex-end;
+  transform-origin: right center;
+}
+.lr-root.rtl-song[data-align="right"] .lr-dots {
+  justify-content: flex-start;
+  transform-origin: left center;
+}
+
+/* Interlude dots */
+.lr-dots {
+  display: flex;
+  gap: 0.32em;
+  height: 0.9em;
+  align-items: center;
+  font-size: var(--lr-size);
+}
+.lr-dot {
+  width: 0.36em;
+  height: 0.36em;
+  border-radius: 50%;
+  background: var(--lr-active);
+  opacity: calc(0.3 + var(--f, 0) * 0.7);
+}
+.lr-root[data-align="center"] .lr-dots {
+  justify-content: center;
+}
+.lr-root[data-align="right"] .lr-dots {
+  justify-content: flex-end;
+}
+
+/* States */
+.lr-message {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 var(--pad);
+  gap: 6px;
+}
+.lr-message-title {
+  margin: 0;
+  font-size: calc(var(--lr-size) * 0.85);
+  font-weight: var(--lr-weight);
+  letter-spacing: var(--lr-ls);
+}
+.lr-message-detail {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.6;
+}
+.lr-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  padding: 0 var(--pad);
+}
+.lr-loading span {
+  height: calc(var(--lr-size) * 0.72);
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+.lr-plain {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 8px var(--pad) 40px;
+  white-space: pre-line;
+  font-size: calc(var(--lr-size) * 0.62);
+  font-weight: 600;
+  line-height: 1.5;
+  scrollbar-width: none;
+}
+.lr-plain-note {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lr-loading span,
+  img.bg-art.spin {
+    animation: none;
+  }
+}
+
+/* ---------- chrome ---------- */
+.lock-badge,
+.mock-badge {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.3);
+  color: rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+  z-index: 6;
+}
+.mock-badge {
+  top: auto;
+  right: auto;
+  left: 12px;
+  bottom: 8px;
+}
+.debug {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #9ef0b5;
+  font: 11px/1.4 ui-monospace, Consolas, monospace;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Hover toolbar */
+.toolbar {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(20, 18, 24, 0.62);
+  backdrop-filter: blur(12px);
+  color: rgba(255, 255, 255, 0.86);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+}
+.card:hover .toolbar,
+.toolbar:focus-within {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.toolbar button {
+  all: unset;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.toolbar button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.toolbar button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+.toolbar-offset {
+  min-width: 30px;
+  text-align: center;
+  font: 600 11px/1 "Inter Variable", sans-serif;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+.mode-title .toolbar {
+  top: 50%;
+  transform: translateY(-50%);
+}
+.mode-title:hover .toolbar {
+  transform: translateY(-50%);
+}
+
+/* Toast */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 9;
+  max-width: calc(100% - 28px);
+  box-sizing: border-box;
+  transform: translateX(-50%);
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(20, 18, 24, 0.82);
+  backdrop-filter: blur(12px);
+  color: #fff;
+  font: 500 12.5px/1.35 "Inter Variable", sans-serif;
+  text-align: center;
+  pointer-events: none;
+  animation: toast-in 0.2s ease;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+/* Invisible resize grips along edges and corners. */
+.grip {
+  position: absolute;
+  z-index: 10;
+}
+.grip-n,
+.grip-s {
+  left: 12px;
+  right: 12px;
+  height: 6px;
+  cursor: ns-resize;
+}
+.grip-n { top: 0; }
+.grip-s { bottom: 0; }
+.grip-e,
+.grip-w {
+  top: 12px;
+  bottom: 12px;
+  width: 6px;
+  cursor: ew-resize;
+}
+.grip-e { right: 0; }
+.grip-w { left: 0; }
+.grip-ne,
+.grip-nw,
+.grip-se,
+.grip-sw {
+  width: 14px;
+  height: 14px;
+}
+.grip-ne { top: 0; right: 0; cursor: nesw-resize; }
+.grip-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.grip-nw { top: 0; left: 0; cursor: nwse-resize; }
+.grip-se { bottom: 0; right: 0; cursor: nwse-resize; }

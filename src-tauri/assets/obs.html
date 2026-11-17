@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MLP lyrics overlay</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      /* OBS browser source: transparent page, outlined karaoke line + the next line.
+         URL options: ?size=56&align=center|left|right&color=%23ffffff&dim=0.55&next=1&title=1 */
+      :root {
+        --size: 56px;
+        --color: #ffffff;
+        --dim: 0.55;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        overflow: hidden;
+        font-family: "SF Pro Display", "Inter", "Segoe UI Variable Display", "Segoe UI", "Yu Gothic UI", "Microsoft YaHei UI", "Malgun Gothic", sans-serif;
+      }
+      #wrap {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding: 24px 32px;
+        gap: 6px;
+        filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.95)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+      }
+      .line {
+        font-size: var(--size);
+        font-weight: 800;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+        transition: opacity 0.25s;
+      }
+      #cur {
+        color: transparent;
+        background-image: linear-gradient(90deg, var(--color) calc(var(--p, 0) * 100%), rgba(255, 255, 255, var(--dim)) calc(var(--p, 0) * 100% + 0.6em));
+        -webkit-background-clip: text;
+        background-clip: text;
+      }
+      #next {
+        font-size: calc(var(--size) * 0.62);
+        color: rgba(255, 255, 255, var(--dim));
+      }
+      #title {
+        font-size: calc(var(--size) * 0.36);
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.75);
+      }
+      .hide {
+        opacity: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="wrap">
+      <div id="title" class="line hide"></div>
+      <div id="cur" class="line"></div>
+      <div id="next" class="line"></div>
+    </div>
+    <script>
+      const q = new URLSearchParams(location.search);
+      const root = document.documentElement.style;
+      if (q.get("size")) root.setProperty("--size", `${+q.get("size")}px`);
+      if (q.get("color")) root.setProperty("--color", q.get("color"));
+      if (q.get("dim")) root.setProperty("--dim", q.get("dim"));
+      const align = q.get("align") || "center";
+      document.getElementById("wrap").style.textAlign = align;
+      const showNext = q.get("next") !== "0";
+      const showTitle = q.get("title") === "1";
+      const $cur = document.getElementById("cur");
+      const $next = document.getElementById("next");
+      const $title = document.getElementById("title");
+      let st = null;
+      async function poll() {
+        try {
+          const r = await fetch("/state", { cache: "no-store" });
+          st = await r.json();
+          st.at = performance.now();
+        } catch {
+          st = null;
+        }
+        setTimeout(poll, 250);
+      }
+      // Progress through the line from its word timings (or evenly), extrapolated between polls.
+      function progress(s, t) {
+        if (!s.words || !s.words.length) return Math.min(1, Math.max(0, (t - s.start) / Math.max(1, s.end - s.start)));
+        const n = s.words.length;
+        for (let i = 0; i < n; i++) {
+          const w = s.words[i];
+          if (t < w.s) return i / n;
+          if (t < w.e) return (i + (t - w.s) / Math.max(1, w.e - w.s)) / n;
+        }
+        return 1;
+      }
+      function frame() {
+        if (st && st.line) {
+          const t = st.pos + (st.playing ? performance.now() - st.at : 0);
+          if ($cur.textContent !== st.line) $cur.textContent = st.line;
+          $cur.style.setProperty("--p", progress(st, t).toFixed(4));
+          $next.textContent = showNext ? st.next || "" : "";
+          $title.textContent = st.title ? `${st.title} — ${st.artist}` : "";
+          $title.classList.toggle("hide", !showTitle || !st.title);
+          $cur.classList.remove("hide");
+        } else {
+          $cur.classList.add("hide");
+          $next.textContent = "";
+        }
+        requestAnimationFrame(frame);
+      }
+      poll();
+      requestAnimationFrame(frame);
+    </script>
+  </body>
+</html>
