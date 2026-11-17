@@ -181,6 +181,38 @@ mod tests {
     }
 }
 
+/// Lists words of a lyrics file the analyzer can't fully read (kanji left in the reading), and with
+/// MLP_JA_JSON=out.jsonl also writes every line's words for the TS romaji tests:
+///   MLP_JA_LINES=lyrics.txt cargo test --lib ja_unread -- --ignored --nocapture
+#[cfg(test)]
+mod ja_dump {
+    use super::*;
+    use std::io::Write;
+    #[test]
+    #[ignore]
+    fn ja_unread() {
+        if !super::tests::dict() {
+            return;
+        }
+        let text = std::fs::read_to_string(std::env::var("MLP_JA_LINES").unwrap()).unwrap();
+        let mut json = std::env::var("MLP_JA_JSON").ok().map(|p| std::fs::File::create(p).unwrap());
+        for line in text.lines().filter(|l| !l.trim().is_empty()) {
+            let words = analyze(line);
+            if let Some(f) = json.as_mut() {
+                writeln!(f, "{}", serde_json::json!({ "line": line, "words": words })).unwrap();
+            }
+            let bad: Vec<String> = words
+                .iter()
+                .filter(|w| w.display.chars().any(is_kanji) && (w.yomi.is_empty() || w.yomi.chars().any(is_kanji)))
+                .map(|w| format!("{}[{}|{}|{}]", w.display, w.yomi, w.pos, w.pos1))
+                .collect();
+            if !bad.is_empty() {
+                println!("{line}  ->  {}", bad.join("  "));
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod fallback_tests {
     use super::analyze;

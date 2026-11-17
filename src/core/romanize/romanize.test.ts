@@ -25,6 +25,30 @@ describe("japanese", () => {
     expect(jaLine(words, "plain").text).toBe("kyou wa ii tenki desu");
     expect(jaLine(words, "macron").text).toBe("kyō wa ii tenki desu");
   });
+  it("keeps the doubled consonant of a small っ split from the next word", () => {
+    // IPADIC splits て-forms: 待っ|て, 言っ|て — romanized alone the っ used to vanish (mate, ite).
+    expect(jaLine([W("待っ", "マッ", "動詞", "自立"), W("て", "テ", "助詞", "接続助詞")], "plain").text).toBe("matte");
+    expect(jaLine([W("言っ", "イッ", "動詞", "自立"), W("た", "タ", "助動詞")], "plain").text).toBe("itta");
+    // っ on its own: っ|つっ|たって
+    expect(jaLine([W("っ", "ッ", "動詞", "非自立"), W("つっ", "ツッ", "動詞", "自立"), W("たって", "タッテ", "助詞", "接続助詞")], "plain").text).toBe("ttsuttatte");
+  });
+  it("spaces copulas and the contracted ん like spoken Japanese", () => {
+    const w = [W("もん", "モン", "名詞", "非自立"), W("な", "ナ", "助動詞"), W("ん", "ン", "名詞", "非自立"), W("でしょ", "デショ", "助動詞")];
+    expect(jaLine(w, "plain").text).toBe("mon nan desho");
+  });
+  it("leaves kanji lines as written until the dictionary is there (no half-romaji)", async () => {
+    // Not in the app (no analyzer): kana-only lines are romanized, lines with kanji wait.
+    const ly: Lyrics = {
+      kind: "line", source: "lrclib", id: 4242, trackName: "t", artistName: "a", durationMs: 60_000,
+      lines: [
+        { start: 0, end: 1000, text: "ありがとう", words: null },
+        { start: 1000, end: 2000, text: "今日はいい天気", words: null },
+      ],
+    };
+    const r = await romanizeLyrics(ly, DEFAULT_SETTINGS.romanization);
+    expect(r[0]?.text).toBe("arigatou");
+    expect(r[1]).toBeNull();
+  });
 });
 
 describe("chinese / korean / other", () => {

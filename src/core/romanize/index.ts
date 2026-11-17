@@ -82,18 +82,43 @@ export function jaToken(w: JaWord, long: RomanOptions["romajiLong"]): { text: st
   else text = KANA.test(w.display) ? wanakana.toRomaji(w.display) : w.display;
   text = text.replace(/[々〻〃]/g, ""); // iteration marks never belong in romaji
   if (long === "macron") text = macron(text);
-  // Verb endings attach (iki|masu → ikimasu); copulas stay separate (tenki desu).
-  const copula = /^(です|でした|でしょう|だ|だった|だろう)$/.test(w.display);
+  // Verb endings attach (iki|masu → ikimasu); copulas stay separate (tenki desu, kirei na, mon nan desho).
+  const copula = /^(です|でした|でしょう|でしょ|だ|だった|だろう|な)$/.test(w.display);
+  // The contracted nominalizer ん belongs to the word before it (nan desho, not na n desho).
+  const nominalN = /^[んン]$/.test(w.display) && w.pos === "名詞";
   const attach =
-    (w.pos === "助動詞" && !copula) || w.pos1 === "接尾" || w.pos === "記号" || (isParticle && (w.pos1 === "接続助詞" || w.display === "っ")) || /^\s*$/.test(w.display);
+    (w.pos === "助動詞" && !copula) ||
+    w.pos1 === "接尾" ||
+    w.pos === "記号" ||
+    nominalN ||
+    (isParticle && (w.pos1 === "接続助詞" || w.display === "っ")) ||
+    /^\s*$/.test(w.display);
   return { text, attach };
+}
+
+/**
+ * A small っ/ッ at the end of a word (or split off on its own) doubles the next word's first consonant:
+ * 命|っ|つっ|たって → inochi ttsuttatte. Romanized alone it would just disappear.
+ */
+function carrySmallTsu(words: JaWord[]): JaWord[] {
+  const out = words.map((w) => ({ ...w }));
+  for (let i = 0; i < out.length - 1; i++) {
+    const y = out[i].yomi || (KANA.test(out[i].display) ? wanakana.toKatakana(out[i].display) : "");
+    if (!/ッ$/.test(y)) continue;
+    const next = out[i + 1];
+    const ny = next.yomi || (KANA.test(next.display) ? wanakana.toKatakana(next.display) : "");
+    if (!ny || !/^[\p{Script=Katakana}]/u.test(ny)) continue;
+    out[i].yomi = y.slice(0, -1) || " "; // " " = nothing left to say (the token stays for timing)
+    next.yomi = "ッ" + ny;
+  }
+  return out;
 }
 
 /** Romaji for a line plus per-character-range mapping (start offset → romaji). */
 export function jaLine(words: JaWord[], long: RomanOptions["romajiLong"]): { text: string; pieces: { start: number; end: number; text: string; attach: boolean }[] } {
   const pieces: { start: number; end: number; text: string; attach: boolean }[] = [];
   let pos = 0;
-  for (const w of words) {
+  for (const w of carrySmallTsu(words)) {
     const t = jaToken(w, long);
     pieces.push({ start: pos, end: pos + [...w.display].length, ...t });
     pos += [...w.display].length;
@@ -229,7 +254,10 @@ export async function romanizeLyrics(lyrics: Lyrics, o: RomanOptions): Promise<(
   if (jaIdx.length) {
     jaWords = (isTauri() ? await platform.invoke<JaWord[][]>("jp_readings", { lines: jaIdx.map((i) => texts[i]) }).catch(() => undefined) : undefined) ?? [];
   }
-  const jaFor = new Map(jaIdx.map((i, k) => [i, jaWords[k]?.length ? jaWords[k] : jaFallback(texts[i])]));
+  // No analysis (dictionary still downloading, or mock mode): kana-only lines can still be romanized;
+  // lines with kanji stay as written until the dictionary arrives (a half-converted mix of romaji and
+  // kanji reads worse than either), then everything is romanized again.
+  const jaFor = new Map(jaIdx.map((i, k) => [i, jaWords[k]?.length ? jaWords[k] : HAN.test(texts[i]) ? null : jaFallback(texts[i])]));
 
   const out = lyrics.lines.map((line, i): RomanLine | null => {
     const sc = scripts[i];
@@ -239,7 +267,8 @@ export async function romanizeLyrics(lyrics: Lyrics, o: RomanOptions): Promise<(
     let words: string[] | undefined;
     let ruby: RubyPiece[] | undefined;
     if (sc === "ja") {
-      const analyzed = jaFor.get(i)!;
+      const analyzed = jaFor.get(i);
+      if (!analyzed) return null;
       const { text: r, pieces } = jaLine(analyzed, o.romajiLong);
       roman = r;
       let off = 0;
