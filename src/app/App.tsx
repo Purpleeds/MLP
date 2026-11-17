@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "r
 import { isTauri, platform, type ResizeDirection } from "../core/platform";
 import { getSettings, updateSettings, useSettings } from "../core/settings/store";
 import { detectGpu } from "../core/settings/light";
+import { updateFeed } from "../core/version";
 import type { DisplayMode, Elements } from "../core/settings/schema";
 import { pushMediaConfig, useNowPlaying, type NowPlaying } from "../core/playback/nowPlaying";
 import { displayMeta, elementsFor } from "../core/display";
@@ -296,9 +297,9 @@ export default function App() {
   // Upgrade 16: once a day, quietly look for a new version.
   useEffect(() => {
     const { updateUrl, autoUpdateCheck, lastUpdateCheck } = getSettings().app;
-    if (!isTauri() || !updateUrl.trim() || !autoUpdateCheck || Date.now() - lastUpdateCheck < 24 * 3600_000) return;
+    if (!isTauri() || !autoUpdateCheck || Date.now() - lastUpdateCheck < 24 * 3600_000) return;
     const t = setTimeout(async () => {
-      const r = await platform.invoke<{ version: string | null }>("update_check", { url: updateUrl }).catch(() => null);
+      const r = await platform.invoke<{ version: string | null }>("update_check", { url: updateFeed(updateUrl) }).catch(() => null);
       void updateSettings("app.lastUpdateCheck", Date.now());
       if (r?.version) toast.show(`MLP ${r.version} is available — install it in Settings → General.`, 8000);
     }, 20_000);

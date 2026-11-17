@@ -285,7 +285,7 @@ async fn download_inner(app: &AppHandle, a: &Asset) -> Result<PathBuf, String> {
     let part = dir.join("downloads").join(format!("{}.part", a.id));
     let have = part.metadata().map(|m| m.len()).unwrap_or(0);
 
-    let client = reqwest::Client::builder().user_agent("MLP/0.1.0").build().map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder().user_agent(concat!("MLP/", env!("CARGO_PKG_VERSION"))).build().map_err(|e| e.to_string())?;
     let mut req = client.get(a.url);
     if have > 0 {
         req = req.header("Range", format!("bytes={have}-"));

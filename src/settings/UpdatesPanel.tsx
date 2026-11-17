@@ -1,8 +1,9 @@
-// Upgrade 16: updates from GitHub Releases (signed with the app's updater key). The address of the
-// release feed (latest.json) is set once the project is on GitHub.
+// Upgrade 16: updates from GitHub Releases (signed with the app's updater key). The official feed is
+// built in (core/version.ts); Settings → General → Update feed can point somewhere else.
 import { useEffect, useState } from "react";
 import { isTauri, platform } from "../core/platform";
 import { updateSettings, useSettings } from "../core/settings/store";
+import { APP_VERSION, updateFeed } from "../core/version";
 
 interface UpdateInfo {
   current: string;
@@ -29,7 +30,7 @@ export function UpdatesPanel() {
     setBusy("check");
     setMsg("");
     try {
-      const r = await platform.invoke<UpdateInfo>("update_check", { url: s.app.updateUrl });
+      const r = await platform.invoke<UpdateInfo>("update_check", { url: updateFeed(s.app.updateUrl) });
       if (r) setInfo(r);
       await updateSettings("app.lastUpdateCheck", Date.now());
       if (r && !r.version) setMsg(`You have the latest version (${r.current}).`);
@@ -42,7 +43,7 @@ export function UpdatesPanel() {
   const install = async () => {
     setBusy("install");
     try {
-      await platform.invoke("update_install", { url: s.app.updateUrl });
+      await platform.invoke("update_install", { url: updateFeed(s.app.updateUrl) });
     } catch (e) {
       setMsg(String(e));
       setBusy(null);
@@ -51,9 +52,8 @@ export function UpdatesPanel() {
 
   return (
     <div className="capture">
-      {!s.app.updateUrl.trim() ? (
-        <p className="help">Set the release feed address above (e.g. https://github.com/you/mlp/releases/latest/download/latest.json) to get updates.</p>
-      ) : (
+      <p className="help">You have MLP {APP_VERSION}.</p>
+      {(
         <div className="inline">
           <button className="btn" disabled={!!busy} onClick={() => void check()}>
             {busy === "check" ? "Checking…" : "Check for updates"}

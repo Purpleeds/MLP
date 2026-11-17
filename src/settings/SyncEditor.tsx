@@ -8,6 +8,7 @@ import { lrcTime, publishToLrclib, syncUnits, toLrc, validatePublish, type Stamp
 import { getSettings } from "../core/settings/store";
 import { isTauri, platform } from "../core/platform";
 import { aiTimingLrc, lrcToPlain } from "../core/ai/export";
+import { CLIENT_ID } from "../core/version";
 
 const SEEK_BACK_MS = 5000;
 
@@ -230,7 +231,7 @@ function PublishForm({ np, lrc, plain }: { np: NonNullable<ReturnType<typeof use
           fetch: (url, init) => fetch(url, init),
           solve: async (prefix, target) => (await platform.invoke<string>("lrclib_solve", { prefix, target })) ?? "",
           base: (getSettings().provider?.baseUrl || "https://lrclib.net/api").replace(/\/+$/, ""),
-          client: "MLP/0.1.0 (floating lyrics for Windows)",
+          client: CLIENT_ID,
         },
         (s) => setStatus({ busy: true, text: s }),
       );

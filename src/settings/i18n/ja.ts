@@ -172,6 +172,7 @@ export const ja: Record<string, string> = {
   "Thai → RTGS": "タイ語 → RTGS",
   "Light mode (laptops, integrated graphics)": "ライトモード（ノート PC・内蔵グラフィックス）",
   "Static cover background, 30 fps, no blur. AI listening keeps only auto-sync (2 CPU threads): no vocal isolation, no AI-written lyrics. Turns on by itself on PCs without a graphics card; turning it off restores the full settings.": "背景はジャケットの静止画、30 fps、ぼかしなし。AI 聞き取りは自動同期だけ（CPU 2 スレッド）で、ボーカル分離と AI 歌詞はオフ。グラフィックスカードのない PC では自動でオンになり、オフにすると通常の設定に戻ります。",
+  "Leave empty for the official MLP releases on GitHub.": "空欄のままなら GitHub の公式 MLP リリースを使います。",
   "Other scripts": "そのほかの文字",
   "Cyrillic, Greek, Hindi and more.": "キリル・ギリシャ・ヒンディーなど。",
   "Arabic / Hebrew": "アラビア語 / ヘブライ語",

@@ -2,10 +2,9 @@
 import type { LrclibRecord } from "./model";
 import type { Query } from "./query";
 import { getSettings } from "../settings/store";
+import { CLIENT_ID } from "../version";
 
 export const LRCLIB_BASE = "https://lrclib.net/api";
-// App name + version only (no personal data).
-const CLIENT_ID = "MLP/0.1.0 (floating lyrics for Windows)";
 const GAP_MS = 300;
 const TIMEOUT_MS = 8000;
 const RETRIES = 2;

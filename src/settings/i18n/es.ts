@@ -172,6 +172,7 @@ export const es: Record<string, string> = {
   "Thai → RTGS": "Tailandés → RTGS",
   "Light mode (laptops, integrated graphics)": "Modo ligero (portátiles, gráficos integrados)",
   "Static cover background, 30 fps, no blur. AI listening keeps only auto-sync (2 CPU threads): no vocal isolation, no AI-written lyrics. Turns on by itself on PCs without a graphics card; turning it off restores the full settings.": "Fondo con la portada fija, 30 fps, sin desenfoque. La escucha con IA solo mantiene la sincronización automática (2 hilos de CPU): sin separación de voz ni letras escritas por IA. Se activa sola en PC sin tarjeta gráfica; al desactivarlo vuelve la configuración completa.",
+  "Leave empty for the official MLP releases on GitHub.": "Déjalo vacío para usar las versiones oficiales de MLP en GitHub.",
   "Other scripts": "Otras escrituras",
   "Cyrillic, Greek, Hindi and more.": "Cirílico, griego, hindi y más.",
   "Arabic / Hebrew": "Árabe / hebreo",

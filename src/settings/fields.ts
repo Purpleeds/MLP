@@ -109,7 +109,7 @@ export const SECTIONS: Section[] = [
         title: "Window",
         fields: [
           { kind: "custom", id: "autostart", label: "Start with Windows", help: "Starts quietly in the tray and appears when music plays." },
-          { kind: "text", path: "app.updateUrl", label: "Update feed", placeholder: "https://github.com/you/mlp/releases/latest/download/latest.json" },
+          { kind: "text", path: "app.updateUrl", label: "Update feed", help: "Leave empty for the official MLP releases on GitHub.", placeholder: "https://github.com/Purpleeds/MLP/releases/latest/download/latest.json" },
           { kind: "toggle", path: "app.autoUpdateCheck", label: "Look for updates once a day" },
           { kind: "custom", id: "updates", label: "Updates" },
           { kind: "toggle", path: "window.alwaysOnTop", label: "Keep on top of other windows" },
