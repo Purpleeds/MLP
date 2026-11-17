@@ -13,6 +13,7 @@ pub struct WordSpan {
 
 /// `logp`: T × V log-probabilities (row-major), `blank`: blank id, `words`: token ids per word.
 /// Returns one span per non-empty word, or None if the text cannot fit the audio.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn align(logp: &[f32], t_len: usize, v: usize, blank: usize, words: &[Vec<usize>]) -> Option<Vec<WordSpan>> {
     align_with(logp, t_len, v, blank, words, &[])
 }

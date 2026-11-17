@@ -49,6 +49,9 @@
     "shortDescription": "Floating synced lyrics for Spotify and YouTube Music",
     "longDescription": "Always-on-top floating lyrics window with word-by-word fill, romanization and display modes, using LRCLIB lyrics.",
     "category": "Music",
+    "macOS": {
+      "minimumSystemVersion": "13.4"
+    },
     "windows": {
       "nsis": {
         "installMode": "currentUser",

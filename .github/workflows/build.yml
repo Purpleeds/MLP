@@ -16,7 +16,8 @@ jobs:
             bundles: nsis
           - os: macos-latest
             bundles: dmg
-          - os: ubuntu-22.04
+          # 24.04: the prebuilt ONNX Runtime needs glibc 2.38+ / GCC 13's libstdc++ (22.04 has 2.35)
+          - os: ubuntu-24.04
             bundles: deb,appimage
     runs-on: ${{ matrix.os }}
     steps:
@@ -44,6 +45,9 @@ jobs:
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib
 
       - name: Build app
+        env:
+          # ONNX Runtime's macOS objects target 13.4 (also bundle.macOS.minimumSystemVersion)
+          MACOSX_DEPLOYMENT_TARGET: "13.4"
         run: npx tauri build --bundles ${{ matrix.bundles }}
 
       - uses: actions/upload-artifact@v4

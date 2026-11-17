@@ -148,6 +148,7 @@ mod imp {
         }
 
         /// Align the lines somewhere inside `audio` (which starts at song time `from_ms`).
+        #[cfg_attr(not(test), allow(dead_code))] // used by the benches and tests
         pub fn align(&mut self, audio: &[f32], from_ms: u64, lines: &[Vec<String>]) -> Result<Vec<Vec<Option<WordTime>>>, String> {
             self.align_tuned(audio, from_ms, lines, None, &Tune::default())
         }
