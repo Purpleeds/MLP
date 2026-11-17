@@ -68,9 +68,23 @@ Dev aids (debug builds): `MLP_MOCK=1` (demo song in the app), `MLP_MOCK=ai` (dem
 
 ## Privacy
 
-MLP sends the title, artist, album and length of the playing song to LRCLIB to find lyrics, and to Apple's iTunes Search to find sharper cover art and the Apple Music id used for the community lyrics database (both can be turned off in Settings). The community lyrics files come from GitHub. Lyrics you sync are only published to LRCLIB when you press Publish. If you connect your own Spotify developer app (optional), MLP asks Spotify's Web API what is playing.
+No accounts, no analytics, no telemetry. To find lyrics MLP sends the playing song's title, artist, album and length to LRCLIB (and Apple's iTunes Search for cover art); lyric lines of foreign-language songs go to a translation service while translations are on. AI listening (off by default) keeps the player's audio in memory on your PC and never uploads it. Every connection, what it sends and how to turn it off: **[privacy policy](PRIVACY.md)**.
 
-AI listening (off by default) records only the music app's audio into memory while a song plays. Vocal isolation, auto-sync and AI lyrics run on your PC (ONNX Runtime and whisper.cpp); the audio is never uploaded or saved to disk unless you press "Save". Models are downloaded once from Hugging Face / GitHub when you ask for them. Nothing else leaves your PC.
+## Code signing policy
+
+Status: **the installers are not code-signed yet.** MLP plans to apply to the [SignPath Foundation](https://signpath.org) for free code signing for open-source projects; when releases are signed, they will be signed under these rules:
+
+- Signed files are built by GitHub Actions from this repository only, and every release is approved by hand before it is signed.
+- Committers and reviewers: [Purpleeds](https://github.com/Purpleeds) · Approvers: [Purpleeds](https://github.com/Purpleeds)
+- Privacy: see the [privacy policy](PRIVACY.md); the program sends nothing to other systems except the services listed there.
+
+Signed releases will say "Free code signing provided by SignPath.io, certificate by SignPath Foundation".
+
+Updates are signed separately with the project's updater key (checked by the app before installing), independent of Windows code signing.
+
+## License
+
+MIT, see [LICENSE](LICENSE). The Windows installer also contains Microsoft's DirectML and Visual C++ runtime DLLs (redistributable system libraries) and the Inter typeface (SIL Open Font License). AI models are not included; they are downloaded on request and keep their own licenses (listed below; the MMS aligner is for non-commercial use).
 
 ## Credits
 
