@@ -211,6 +211,8 @@ export const ja: Record<string, string> = {
   "Translation line": "翻訳の行",
   "Shown under foreign-language lyrics.": "外国語の歌詞の下に表示します。",
   "Show translations": "翻訳を表示",
+  "Human translations from VocaDB": "VocaDB の人による翻訳",
+  "Vocaloid and similar songs: use a translation made by a person when VocaDB has one.": "ボカロなどの曲：VocaDB に人が訳した翻訳があればそれを使います。",
   "Translate into": "翻訳先",
   English: "英語",
   Spanish: "スペイン語",

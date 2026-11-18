@@ -10,7 +10,7 @@ import type { Timeline } from "../core/timing/timeline";
 import { jpDictVersion, onJpDict, romanizeLyrics, type RomanLine } from "../core/romanize";
 import { romanTimeline } from "../core/romanize/timeline";
 import type { TranslateDeps } from "../core/translate";
-import { getTranslations } from "../core/translationFiles";
+import { getTranslations, translationLabel, type TranslationResult } from "../core/translationFiles";
 import { displayMeta } from "../core/display";
 import { isTauri, platform } from "../core/platform";
 
@@ -222,6 +222,24 @@ function PlainWithSync({ lyrics, np, variant }: { lyrics: Lyrics; np: NowPlaying
   return <Timed lyrics={lines} np={np} variant={variant} external />;
 }
 
+/** Small tag saying who made the translation under the lines (human / lyrics file / machine). */
+function TranslationBadge({ r }: { r: TranslationResult }) {
+  const o = useSettings().translation;
+  if (!r.lines.some(Boolean)) return null;
+  const label = translationLabel(r, o);
+  const tip =
+    r.kind === "human"
+      ? `Translated by a person, from VocaDB${r.source ? ` (${r.source})` : ""}.`
+      : r.kind === "lyrics"
+        ? "Translation that came with the lyrics."
+        : "Translated by a machine: it may be wrong, especially for song lyrics.";
+  return (
+    <span className={`tr-badge ${r.kind ?? "machine"}`} title={tip}>
+      {label}
+    </span>
+  );
+}
+
 function Timed({ lyrics, np, variant, mock, external }: { lyrics: Lyrics; np: NowPlaying; variant: LyricVariant; mock?: boolean; external?: boolean }) {
   const s = useSettings();
   const live = useSongOffset(np);
@@ -244,7 +262,7 @@ function Timed({ lyrics, np, variant, mock, external }: { lyrics: Lyrics; np: No
   const troSig = JSON.stringify({ ...tro, deeplKey: undefined }); // what the shown lines depend on
   const keySig = `${troSig}|${tro.deeplKey}`;
   const meta = displayMeta(np);
-  const [trans, setTrans] = useState<{ for: Lyrics; sig: string; lines: (string | null)[] } | null>(null);
+  const [trans, setTrans] = useState<{ for: Lyrics; sig: string; lines: (string | null)[]; r: TranslationResult } | null>(null);
   const [trRun, setTrRun] = useState(0); // bumped by resets and by coming back online
   useEffect(() => {
     const off = platform.on("translations-reset", () => setTrRun((n) => n + 1));
@@ -264,8 +282,8 @@ function Timed({ lyrics, np, variant, mock, external }: { lyrics: Lyrics; np: No
     const wait = prev.lyrics === lyrics && prev.sig !== keySig ? 900 : lyrics.source === "ai" && prev.lyrics ? 1500 : 0;
     lastTr.current = { lyrics, sig: keySig };
     const t = setTimeout(() => {
-      void getTranslations(lyrics, meta, tro, { fetchJson: translationFetch })
-        .then((r) => alive && setTrans({ for: lyrics, sig: troSig, lines: r.lines }))
+      void getTranslations(lyrics, { ...meta, durationMs: np.durationMs || lyrics.durationMs }, tro, { fetchJson: translationFetch })
+        .then((r) => alive && setTrans({ for: lyrics, sig: troSig, lines: r.lines, r }))
         .catch((e) => platform.log(`translation: ${e}`));
     }, wait);
     return () => {
@@ -292,7 +310,12 @@ function Timed({ lyrics, np, variant, mock, external }: { lyrics: Lyrics; np: No
   const timeline = useMemo(() => (sync ? applySync(base, lyrics, sync.lines, sync.fixes, sync.map) : base), [base, lyrics, sync]);
   const lang = useMemo(() => detectLang(lyrics.lines.map((l) => l.text).join("")), [lyrics]);
   // AI timing already includes what the per-song offset used to fix.
-  return <SyncedLyrics timeline={timeline} offsetMs={totalOffsetMs(s, np, sync ? 0 : songOffsetMs)} lang={lang} variant={variant} canSeek={np.canSeek} title={meta.title} />;
+  return (
+    <>
+      <SyncedLyrics timeline={timeline} offsetMs={totalOffsetMs(s, np, sync ? 0 : songOffsetMs)} lang={lang} variant={variant} canSeek={np.canSeek} title={meta.title} />
+      {transLines && trans && variant === "normal" && <TranslationBadge r={trans.r} />}
+    </>
+  );
 }
 
 /** How long the lyrics run (the record's duration, or the last line when that's later). */

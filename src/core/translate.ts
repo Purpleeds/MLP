@@ -221,7 +221,7 @@ export const wantedLines = (lyrics: Lyrics) => lyrics.lines.map((l, i) => (/\p{L
 /** Translations shipped with the lyrics, or null when the online services should be asked. */
 export function fileTranslations(lyrics: Lyrics, o: TranslateOptions): (string | null)[] | null {
   const fromFile = lyrics.lines.map((l) => (l.translation && langMatches(l.translationLang, o.target) ? l.translation : null));
-  if (fromFile.some(Boolean) || o.provider === "file") return fromFile;
+  if (fromFile.some(Boolean)) return fromFile;
   const lang = guessLanguage(lyrics.lines.map((l) => l.text));
   if (lang && lang === o.target.toLowerCase()) return lyrics.lines.map(() => null);
   return null;

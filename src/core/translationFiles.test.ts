@@ -7,7 +7,7 @@ import {
   translationFileName, type TranslationFiles,
 } from "./translationFiles";
 
-const O = DEFAULT_SETTINGS.translation;
+const O = { ...DEFAULT_SETTINGS.translation, vocadb: false }; // VocaDB has its own tests below
 const lyr = (texts: string[], extra: Partial<Lyrics["lines"][number]>[] = []): Lyrics => ({
   kind: "line", source: "lrclib", id: 1, trackName: "夜に駆ける", artistName: "YOASOBI", durationMs: 1,
   lines: texts.map((text, i) => ({ start: i * 1000, end: i * 1000 + 900, text, words: null, ...extra[i] })),
@@ -108,7 +108,7 @@ describe("getTranslations", () => {
   it("saves nothing when the limit is reached before anything is translated", async () => {
     const { m, files } = memFiles();
     const r = await getTranslations(lyr(["夜空"]), SONG, O, { ...mm(0).deps, files });
-    expect(r).toEqual({ lines: [null], problem: "quota" });
+    expect(r).toEqual({ lines: [null], problem: "quota", kind: "machine" });
     expect(m.size).toBe(0);
   });
   it("keeps finished lines on a mid-way limit, never saves warning text, finishes later", async () => {
@@ -139,5 +139,61 @@ describe("getTranslations", () => {
     expect(b.qs).toHaveLength(1); // translated again
     expect(await resetAllTranslations(files)).toBe(2);
     expect(m.size).toBe(0);
+  });
+});
+
+describe("human translations (VocaDB)", () => {
+  const HO = { ...O, vocadb: true };
+  const ja = ["夜空を見上げて", "星が流れてく", "君の名前を呼ぶ"];
+  const en = ["Looking up at the night sky", "The stars flow by", "I call your name"];
+  const vdbStore = () => {
+    const m = new Map<string, unknown>();
+    return { get: async (k: string) => m.get(k) as never, set: async (k: string, v: unknown) => void m.set(k, v), delete: async (k: string) => void m.delete(k) };
+  };
+  const vocadb = (found: boolean) => ({
+    gapMs: 0,
+    store: vdbStore(),
+    fetchJson: async () => ({
+      ok: true, status: 200,
+      json: { items: found ? [{ id: 5, name: "夜に駆ける", artistString: "YOASOBI", lyrics: [
+        { cultureCodes: ["ja"], translationType: "Original", value: ja.join("\n") },
+        { cultureCodes: ["en"], translationType: "Translation", value: en.join("\n"), source: "Wiki", url: "https://example.org/tl" },
+      ] }] : [] },
+    }),
+  });
+
+  it("uses VocaDB before the machine, saves it, and reuses the file", async () => {
+    const { m, files } = memFiles();
+    const b = mm();
+    const r = await getTranslations(lyr(ja), SONG, HO, { ...b.deps, files, vocadb: vocadb(true) });
+    expect(r).toMatchObject({ kind: "human", lines: en, source: "https://example.org/tl" });
+    expect(b.qs).toHaveLength(0);
+    const f = parseTranslation(m.get("夜に駆ける - YOASOBI.txt")!)!;
+    expect(f).toMatchObject({ provider: "vocadb", source: "https://example.org/tl", complete: true });
+    const again = await getTranslations(lyr(ja), SONG, HO, { ...b.deps, files, vocadb: vocadb(false) });
+    expect(again.kind).toBe("human");
+    expect(again.lines).toEqual(en);
+  });
+
+  it("falls back to the machine, which never overwrites a saved human translation", async () => {
+    const { m, files } = memFiles();
+    await getTranslations(lyr(ja), SONG, HO, { ...mm().deps, files, vocadb: vocadb(true) });
+    const before = m.get("夜に駆ける - YOASOBI.txt");
+    const changed = [...ja, "新しい行"];
+    const r = await getTranslations(lyr(changed), SONG, HO, { ...mm().deps, files, vocadb: vocadb(false) });
+    expect(r.kind).toBe("machine");
+    expect(m.get("夜に駆ける - YOASOBI.txt")).toBe(before);
+    const none = await getTranslations(lyr(["夜空"]), { title: "Other" }, HO, { ...mm().deps, files, vocadb: vocadb(false) });
+    expect(none).toMatchObject({ kind: "machine", lines: ["EN(夜空)"] });
+  });
+
+  it("works with 'only the lyrics file' too, without any machine translation", async () => {
+    const { files } = memFiles();
+    const b = mm();
+    const r = await getTranslations(lyr(ja), SONG, { ...HO, provider: "file" }, { ...b.deps, files, vocadb: vocadb(true) });
+    expect(r.kind).toBe("human");
+    const none = await getTranslations(lyr(ja), { title: "Other" }, { ...HO, provider: "file" }, { ...b.deps, files, vocadb: vocadb(false) });
+    expect(none.lines).toEqual([null, null, null]);
+    expect(b.qs).toHaveLength(0);
   });
 });

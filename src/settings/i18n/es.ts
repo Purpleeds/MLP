@@ -211,6 +211,8 @@ export const es: Record<string, string> = {
   "Translation line": "Línea de traducción",
   "Shown under foreign-language lyrics.": "Se muestra bajo la letra en otro idioma.",
   "Show translations": "Mostrar traducciones",
+  "Human translations from VocaDB": "Traducciones humanas de VocaDB",
+  "Vocaloid and similar songs: use a translation made by a person when VocaDB has one.": "Canciones Vocaloid y similares: usa una traducción hecha por una persona cuando VocaDB la tiene.",
   "Translate into": "Traducir al",
   English: "Inglés",
   Spanish: "Español",

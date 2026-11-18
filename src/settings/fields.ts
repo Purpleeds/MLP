@@ -526,6 +526,13 @@ export const SECTIONS: Section[] = [
             ].map(([value, label]) => ({ value, label })),
           },
           {
+            kind: "toggle",
+            path: "translation.vocadb",
+            label: "Human translations from VocaDB",
+            help: "Vocaloid and similar songs: use a translation made by a person when VocaDB has one.",
+            when: (s) => s.translation.enabled,
+          },
+          {
             kind: "select",
             path: "translation.provider",
             label: "Source",

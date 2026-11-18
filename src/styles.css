@@ -498,7 +498,8 @@ img.bg-art.spin {
     border: 1px solid CanvasText;
   }
   .bg-layer,
-  .ai-badge {
+  .ai-badge,
+  .tr-badge {
     display: none;
   }
   .lr-root,
@@ -576,6 +577,35 @@ img.bg-art.spin {
   opacity: 0.75;
   pointer-events: auto;
   z-index: 3;
+}
+/* Who made the translation: a person (VocaDB), the lyrics file, or a machine. */
+.tr-badge {
+  position: absolute;
+  left: calc(var(--pad) * 0.5);
+  bottom: calc(var(--pad) * 0.4);
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 10px/1 system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: var(--lr-inactive);
+  background: color-mix(in srgb, var(--lr-inactive) 12%, transparent);
+  opacity: 0.7;
+  pointer-events: auto;
+  z-index: 3;
+}
+.tr-badge.human {
+  color: var(--lr-active);
+  background: color-mix(in srgb, var(--lr-active) 14%, transparent);
+  opacity: 0.8;
+}
+.mode-bar .tr-badge,
+.mode-overlay .tr-badge,
+.mode-mini .tr-badge {
+  display: none;
 }
 /* Click a line to jump there (Upgrade 9). */
 .lr-root.seekable .lr-line {

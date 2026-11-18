@@ -151,6 +151,8 @@ export interface Settings {
     /** target language code, e.g. en, es, de, ja */
     target: string;
     deeplKey: string;
+    /** songs on VocaDB (Vocaloid & co.): use its human translations before any machine translation */
+    vocadb: boolean;
   };
   romanization: {
     /** roman-main: romanized lyrics with the original underneath; original-main: the reverse */
@@ -352,7 +354,7 @@ export const DEFAULT_SETTINGS: Settings = {
     sourceOffsetMs: { spotify: 0, browser: 0, "ytmusic-app": 0, other: 0 },
     learnOffsets: true,
   },
-  translation: { enabled: true, provider: "mymemory", target: "en", deeplKey: "" },
+  translation: { enabled: true, provider: "mymemory", target: "en", deeplKey: "", vocadb: true },
   romanization: {
     mode: "roman-main",
     ja: true,

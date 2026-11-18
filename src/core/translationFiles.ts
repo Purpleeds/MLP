@@ -4,6 +4,7 @@
 import type { Lyrics } from "./lyrics/model";
 import { isTauri, platform } from "./platform";
 import { createKv } from "./storage/kv";
+import { findVocaDbSong, forgetVocaDbSong, humanTranslation, type LookupDeps } from "./lyrics/vocadb";
 import {
   fileTranslations, problemText, TranslateError, translateTexts, wantedLines,
   type LineResults, type TranslateDeps, type TranslateOptions, type TranslateProblem,
@@ -43,6 +44,8 @@ export interface SavedTranslation {
   provider: string;
   hash: string;
   complete: boolean;
+  /** where a human translation came from (VocaDB lyrics page) */
+  source?: string;
   /** original text + result (string = translation, null = nothing to show, undefined = not done yet) */
   lines: { text: string; tr: string | null | undefined }[];
 }
@@ -57,6 +60,7 @@ export function formatTranslation(f: SavedTranslation): string {
     `Artist: ${ONE_LINE(f.artist)}`,
     `Language: ${f.target}`,
     `Provider: ${f.provider}`,
+    ...(f.source ? [`Source: ${ONE_LINE(f.source)}`] : []),
     `Lyrics hash: ${f.hash}`,
     `Complete: ${f.complete ? "yes" : "no"}`,
     "",
@@ -79,7 +83,7 @@ export function parseTranslation(text: string): SavedTranslation | null {
     if (t !== "…" && !t.startsWith("→")) return null; // hand-edited beyond recognition
     lines.push({ text: rows[i], tr: t === "…" ? undefined : t.slice(1).trim() || null });
   }
-  return { song: field("Song"), artist: field("Artist"), target: field("Language"), provider: field("Provider"), hash: field("Lyrics hash"), complete: field("Complete") === "yes", lines };
+  return { song: field("Song"), artist: field("Artist"), target: field("Language"), provider: field("Provider"), hash: field("Lyrics hash"), complete: field("Complete") === "yes", ...(field("Source") ? { source: field("Source") } : {}), lines };
 }
 
 // ---------- storage ----------
@@ -150,30 +154,73 @@ async function setStatus(st: TranslationStatus) {
 export interface SongMeta {
   title: string;
   artist?: string;
+  durationMs?: number;
 }
+
+/** Who made the translation shown: a person (VocaDB), the lyrics file (TTML), or a machine. */
+export type TranslationKind = "human" | "lyrics" | "machine";
 
 export interface TranslationResult {
   lines: (string | null)[];
   problem?: TranslateProblem;
+  kind?: TranslationKind;
+  /** human: the page the translation comes from */
+  source?: string;
 }
 
-/** Translation per lyric line (null where none): TTML translations, else saved file, else online + save. */
-export async function getTranslations(
-  lyrics: Lyrics,
-  song: SongMeta,
-  o: TranslateOptions,
-  deps: TranslateDeps & { files?: TranslationFiles; onProblem?: (p: TranslateProblem) => void },
-): Promise<TranslationResult> {
+/** Provider name written in saved files for human translations; never replaced by a machine one. */
+export const HUMAN_PROVIDER = "vocadb";
+
+const machineName = (o: TranslateOptions) => (o.provider === "deepl" ? "DeepL" : "MyMemory");
+export const translationLabel = (r: Pick<TranslationResult, "kind">, o: TranslateOptions) =>
+  r.kind === "human" ? "Human translation · VocaDB" : r.kind === "lyrics" ? "Translation from the lyrics file" : `Machine translation · ${machineName(o)}`;
+
+type Deps = TranslateDeps & { files?: TranslationFiles; onProblem?: (p: TranslateProblem) => void; vocadb?: LookupDeps };
+
+/** VocaDB's human translation lined up with these lyrics, or null (not on VocaDB, none in this language, doesn't fit). */
+async function fromVocaDb(lyrics: Lyrics, song: SongMeta, o: TranslateOptions, deps: Deps) {
+  if (!o.vocadb || lyrics.source === "ai") return null; // AI-heard text rarely lines up
+  const title = song.title || lyrics.trackName;
+  const vdb = await findVocaDbSong(title, song.artist ?? lyrics.artistName, song.durationMs ?? lyrics.durationMs, deps.vocadb).catch((e) => {
+    platform.log(`vocadb: ${e}`);
+    return null;
+  });
+  if (!vdb) return null;
+  const want = new Set(wantedLines(lyrics));
+  return humanTranslation(vdb, lyrics.lines.map((l) => l.text), o.target, (i) => want.has(i));
+}
+
+/**
+ * Translation per lyric line (null where none): TTML translations, else a saved human translation,
+ * else VocaDB's human translation, else saved machine file, else online machine translation + save.
+ */
+export async function getTranslations(lyrics: Lyrics, song: SongMeta, o: TranslateOptions, deps: Deps): Promise<TranslationResult> {
   const shipped = fileTranslations(lyrics, o);
-  if (shipped) return { lines: shipped };
+  if (shipped) return { lines: shipped, kind: "lyrics" };
 
   const files = deps.files ?? appFiles;
   const texts = lyrics.lines.map((l) => l.text);
   const hash = lyricsHash(texts);
   const name = translationFileName(song.title || lyrics.trackName, song.artist); // same name resetTranslation() builds
   const saved = parseTranslation((await files.read(name).catch(() => null)) ?? "");
+  const savedHuman = saved && saved.provider === HUMAN_PROVIDER && saved.target === o.target ? saved : null;
+  if (o.vocadb && savedHuman?.hash === hash && savedHuman.lines.length === texts.length)
+    return { lines: savedHuman.lines.map((l) => l.tr ?? null), kind: "human", source: savedHuman.source };
+
+  const human = await fromVocaDb(lyrics, song, o, deps);
+  if (human) {
+    const f: SavedTranslation = {
+      song: song.title || lyrics.trackName, artist: song.artist ?? "", target: o.target, provider: HUMAN_PROVIDER, hash, complete: true,
+      source: human.url || `https://vocadb.net/S/${human.songId}`,
+      lines: texts.map((text, i) => ({ text, tr: human.lines[i] })),
+    };
+    await files.write(name, formatTranslation(f)).catch((e) => platform.log(`translation save: ${e}`));
+    return { lines: human.lines, kind: "human", source: f.source };
+  }
+  if (o.provider === "file") return { lines: texts.map(() => null), kind: "lyrics" };
+
   const usable = saved && saved.target === o.target && saved.provider === o.provider ? saved : null;
-  if (usable?.complete && usable.hash === hash && usable.lines.length === texts.length) return { lines: usable.lines.map((l) => l.tr ?? null) };
+  if (usable?.complete && usable.hash === hash && usable.lines.length === texts.length) return { lines: usable.lines.map((l) => l.tr ?? null), kind: "machine" };
 
   // Reuse whatever the old file already knows (by line text); send only the rest.
   const known = new Map<string, string | null>();
@@ -200,14 +247,15 @@ export async function getTranslations(
 
   // Save what we have (nothing if nothing was translated); incomplete files are finished next time.
   const anyDone = lines.some((l, i) => want.has(i) && l !== undefined);
-  if (anyDone && (ask.length || !usable || usable.hash !== hash)) {
+  // A saved human translation is never replaced by a machine one (the lyrics may just have changed).
+  if (anyDone && !savedHuman && (ask.length || !usable || usable.hash !== hash)) {
     const f: SavedTranslation = {
       song: song.title || lyrics.trackName, artist: song.artist ?? "", target: o.target, provider: o.provider, hash, complete,
       lines: texts.map((text, i) => ({ text, tr: lines[i] })),
     };
     await files.write(name, formatTranslation(f)).catch((e) => platform.log(`translation save: ${e}`));
   }
-  return { lines: lines.map((l) => l ?? null), problem: res.problem };
+  return { lines: lines.map((l) => l ?? null), problem: res.problem, kind: "machine" };
 }
 
 const problemListeners = new Set<(p: TranslateProblem) => void>();
@@ -230,6 +278,7 @@ async function report(p: TranslateProblem, song: SongMeta, cb?: (p: TranslatePro
 /** Delete this song's saved translation; the lyrics window translates it again. */
 export async function resetTranslation(song: SongMeta, files: TranslationFiles = appFiles) {
   await files.remove(translationFileName(song.title, song.artist));
+  await forgetVocaDbSong(song.title, song.artist ?? "").catch(() => undefined); // look again: translations get added
   await platform.emit("translations-reset");
 }
 
