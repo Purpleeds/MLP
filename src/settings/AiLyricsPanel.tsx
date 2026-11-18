@@ -95,6 +95,8 @@ export function AiLyricsPanel() {
               <span className="capture-label">Written</span>
               <span>
                 {st.lines} lines
+                {st.pass && st.pass > 1 ? ` · play ${st.pass}, ${st.locked ?? 0} lines agreed` : ""}
+                {st.tuned ? " · your tuned model" : ""}
                 {st.lang ? ` · ${st.lang}` : ""}
                 {st.runtime ? ` · ${st.runtime === "whisper-cuda" ? "GPU" : "CPU"}` : ""}
                 {st.source ? ` · ${st.source === "vocals" ? "isolated vocals" : "full mix"}` : ""}

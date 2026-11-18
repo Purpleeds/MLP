@@ -254,6 +254,16 @@ export interface Settings {
     lowPriority: boolean;
     /** small status pill in the lyrics window while AI works */
     indicator: boolean;
+    /** AI lyrics: transcribe again on later plays and merge (lines that agree are locked in) */
+    improveEachPlay: boolean;
+    /** keep the captured audio of songs with synced lyrics as training data ("Train on my songs") */
+    saveTraining: boolean;
+    /** where training data and tuned models go ("" = the roomiest drive that isn't the system drive) */
+    trainingDir: string;
+    /** most hours one training run may take */
+    trainHours: number;
+    /** write AI lyrics with the model trained here, when it beat the original */
+    useTuned: boolean;
   };
   debug: {
     overlay: boolean;
@@ -381,7 +391,7 @@ export const DEFAULT_SETTINGS: Settings = {
   app: { autostart: false, tipShown: false, updateUrl: "", autoUpdateCheck: true, lastUpdateCheck: 0, batterySaver: true, lightMode: false, lightChecked: false, uiLanguage: "auto", screenReader: false, obs: false, obsPort: 7272 },
   provider: { baseUrl: "https://lrclib.net/api", amll: true },
   spotify: { enabled: false, clientId: "" },
-  ai: { listen: false, captureLatencyMs: 0, isolateVocals: false, autoSync: true, pauseFullscreen: true, lyrics: true, whisperModel: "large-v3-turbo-q5_0", whisperRuntime: "auto", autoSyncWhen: "always", threads: 0, lowPriority: true, indicator: true },
+  ai: { listen: false, captureLatencyMs: 0, isolateVocals: false, autoSync: true, pauseFullscreen: true, lyrics: true, whisperModel: "large-v3-turbo-q5_0", whisperRuntime: "auto", autoSyncWhen: "always", threads: 0, lowPriority: true, indicator: true, improveEachPlay: true, saveTraining: false, trainingDir: "", trainHours: 5, useTuned: true },
   debug: { overlay: false },
 };
 

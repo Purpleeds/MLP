@@ -35,6 +35,7 @@ import { fpsCaps, usePower } from "../core/power";
 import { lineAt } from "../core/timing/timeline";
 import { applySync, plainToLines } from "../core/ai/autosync";
 import { useAiLyrics } from "../core/ai/aiLyrics";
+import { useTrainingClip } from "../core/ai/training";
 import { AiLyricsMessage } from "./AiLyricsMessage";
 import { noLyricsHint } from "../core/lyrics/instrumental";
 import { MOCK_TRACK } from "../core/mock/fixtures";
@@ -218,6 +219,7 @@ function PlainWithSync({ lyrics, np, variant }: { lyrics: Lyrics; np: NowPlaying
   const enabled = s.ai.autoSync && isTauri() && lines.lines.length > 0;
   useAutoSync(enabled ? np : null, lines, enabled);
   const sync = useSyncView(enabled ? lines : null);
+  useTrainingClip(np, lines, sync, 0, enabled);
   if (!sync) return <PlainLyrics text={lyrics.plain ?? ""} durationMs={np.durationMs || lyrics.durationMs} autoScroll={s.lyrics.plainAutoScroll} />;
   return <Timed lyrics={lines} np={np} variant={variant} external />;
 }
@@ -308,6 +310,8 @@ function Timed({ lyrics, np, variant, mock, external }: { lyrics: Lyrics; np: No
   useAutoSync(mock || external ? null : np, lyrics, s.ai.autoSync && !external);
   const sync = useSyncView(s.ai.autoSync ? lyrics : null);
   const timeline = useMemo(() => (sync ? applySync(base, lyrics, sync.lines, sync.fixes, sync.map) : base), [base, lyrics, sync]);
+  // "Train on my songs": keep this song's audio + lyrics as a training clip.
+  useTrainingClip(np, lyrics, sync, totalOffsetMs(s, np, sync ? 0 : songOffsetMs), !mock && !external);
   const lang = useMemo(() => detectLang(lyrics.lines.map((l) => l.text).join("")), [lyrics]);
   // AI timing already includes what the per-song offset used to fix.
   return (

@@ -3,6 +3,7 @@ mod art_cache;
 mod obs;
 mod share;
 mod timing_files;
+mod train;
 mod translations;
 mod update;
 #[cfg(windows)]
@@ -263,6 +264,15 @@ pub fn run() {
             translations::tr_delete,
             translations::tr_clear,
             translations::tr_open_folder,
+            train::training_arm,
+            train::training_flush,
+            train::training_info,
+            train::training_model,
+            train::training_open_folder,
+            train::training_status,
+            train::training_stop,
+            train::training_setup,
+            train::training_start,
             timing_files::timing_read,
             timing_files::timing_write,
             timing_files::timing_delete,
