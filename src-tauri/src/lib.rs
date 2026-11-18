@@ -1,6 +1,7 @@
 mod ai;
 mod obs;
 mod share;
+mod timing_files;
 mod translations;
 mod update;
 #[cfg(windows)]
@@ -258,6 +259,12 @@ pub fn run() {
             translations::tr_delete,
             translations::tr_clear,
             translations::tr_open_folder,
+            timing_files::timing_read,
+            timing_files::timing_write,
+            timing_files::timing_delete,
+            timing_files::timing_count,
+            timing_files::timing_clear,
+            timing_files::timing_open_folder,
             update::update_check,
             update::update_install,
             ai::jp_dict_status,

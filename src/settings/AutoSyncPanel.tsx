@@ -5,6 +5,7 @@ import { isTauri, platform } from "../core/platform";
 import { useSettings } from "../core/settings/store";
 import { useNowPlaying } from "../core/playback/nowPlaying";
 import { forgetAutoSync, type SyncStatus } from "../core/ai/engine";
+import { openTimingFolder } from "../core/ai/timingFiles";
 
 const MODEL_ID = "mms-aligner";
 
@@ -102,7 +103,13 @@ export function AutoSyncPanel() {
         >
           Forget AI timing for this song
         </button>
+        {isTauri() && (
+          <button className="btn" onClick={() => void openTimingFolder().catch((e) => setMsg(String(e)))}>
+            Open timing folder
+          </button>
+        )}
       </div>
+      <p className="help">Each song's AI timing is saved as a readable file in the app's “ai\timing” folder.</p>
       {msg && <p className="help">{msg}</p>}
     </div>
   );

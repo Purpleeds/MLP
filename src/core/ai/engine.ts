@@ -1,15 +1,16 @@
 // Step 15 — the auto-sync engine (main window). While a synced song plays it watches how much of the
 // song has been captured (or vocal-isolated), asks the aligner for the next lines, keeps the fixes
-// per song (songs.json `aiSync`) and tells the lyric view, the debug overlay and Settings how it goes.
+// per song (a readable file in <app data>\ai\timing\, see timingFiles.ts) and tells the lyric view, the debug overlay and Settings how it goes.
 import { useEffect, useSyncExternalStore } from "react";
 import { isTauri, platform } from "../platform";
 import { getSettings } from "../settings/store";
 import { DEFAULT_SETTINGS } from "../settings/schema";
 import { trackKey, type NowPlaying } from "../playback/clock";
 import type { Lyrics } from "../lyrics/model";
-import { songKey, songs } from "../lyrics/service";
+import { songKey } from "../lyrics/service";
+import { loadTiming, removeTiming, saveTiming, type SongId } from "./timingFiles";
 import { romanizeLyrics, type RomanOptions } from "../romanize";
-import { anchorsOf, dropOutliers, fitMap, IDENTITY, lyricsSig, nextSequential, nextWindow, syncLines, toFix, type LineFix, type SavedSync, type SyncLine, type TimeMap, type WordTime } from "./autosync";
+import { anchorsOf, dropOutliers, fitMap, IDENTITY, lyricsSig, nextSequential, nextWindow, syncLines, toFix, type LineFix, type SyncLine, type TimeMap, type WordTime } from "./autosync";
 
 export interface SyncView {
   /** the lyrics object these fixes belong to */
@@ -89,16 +90,21 @@ function publishView(v: SyncView) {
 /** The view belongs to the current song's lyrics (not left over from the previous song while a new one starts). */
 const own = (): boolean => !!ctx && !!view && view.for === ctx.lyrics;
 
+/** Write the current view to the song's timing file (now). */
+function writeNow(): Promise<unknown> {
+  if (!own()) return Promise.resolve();
+  const { np, lyrics, sig } = ctx!;
+  const { lines, fixes, map } = view!;
+  return saveTiming({ id: np, sig, lyrics, lines, fixes, map }).catch((e) => platform.log(`[sync] save: ${e}`));
+}
+
 function scheduleSave() {
   if (!own() || !getSettings().ai.autoSync) return;
-  if (!ctx || !view) return;
-  const { song, sig } = ctx;
-  const fixes = view.fixes;
   clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(async () => {
+  const my = gen;
+  saveTimer = window.setTimeout(() => {
     saveTimer = 0;
-    const saved: SavedSync = { v: 1, sig, fixes };
-    await songs.set(song, { ...(await songs.get(song)), aiSync: saved });
+    if (my === gen) void writeNow();
   }, 2_000);
 }
 
@@ -204,24 +210,26 @@ async function start(np: NowPlaying, lyrics: Lyrics) {
   notify();
   attempts.clear();
   backoffUntil = 0;
-  const [roman, prefs] = await Promise.all([romanizeLyrics(lyrics, ALIGN_ROMAN).catch(() => null), songs.get(song)]);
+  const [roman, stored] = await Promise.all([
+    romanizeLyrics(lyrics, ALIGN_ROMAN).catch(() => null),
+    loadTiming(np, sig).catch((e) => (platform.log(`[sync] load: ${e}`), null)),
+  ]);
   if (my !== gen) return;
   const lines = syncLines(lyrics, roman);
-  const saved = { ...(prefs?.aiSync?.v === 1 && prefs.aiSync.sig === sig ? prefs.aiSync.fixes : {}), ...(lastFixes?.sig === sig ? lastFixes.fixes : {}) };
+  const saved = { ...(stored?.fixes ?? {}), ...(lastFixes?.sig === sig ? lastFixes.fixes : {}) };
   publishView({ for: lyrics, lines, fixes: saved, map: fitMap(anchorsOf(lines, saved)) });
+  // Timing from an older version (songs.json): move it into a file now.
+  if (stored?.legacy) void writeNow();
   setStatus({ phase: "idle", detail: "" });
   clearInterval(timer);
   timer = window.setInterval(() => void tick(), TICK_MS);
 }
 
 function flushSave() {
-  if (!saveTimer || !ctx || !view) return;
+  if (!saveTimer) return;
   clearTimeout(saveTimer);
   saveTimer = 0;
-  if (!own()) return;
-  const { song, sig } = ctx;
-  const saved: SavedSync = { v: 1, sig, fixes: view.fixes };
-  void songs.get(song).then((p) => songs.set(song, { ...p, aiSync: saved }));
+  void writeNow();
 }
 
 function stop() {
@@ -245,6 +253,9 @@ function bridge() {
   void platform.on("ai-sync-status-request", () => void platform.emit("ai-sync-status", status));
   void platform.on<string>("ai-sync-forget", (key) => {
     if (ctx && view && ctx.song === key) {
+      clearTimeout(saveTimer); // a pending save would bring the forgotten timing back
+      saveTimer = 0;
+      lastFixes = null;
       attempts.clear();
       publishView({ ...view, fixes: {}, map: IDENTITY });
     }
@@ -278,10 +289,9 @@ export function useSyncView(lyrics: Lyrics | null): SyncView | null {
 }
 export const useSyncStatus = () => useSyncExternalStore(subscribe, () => status);
 
-/** Settings: forget the AI timing saved for a song (the main window drops it too). */
-export async function forgetAutoSync(np: Pick<NowPlaying, "title" | "artist">) {
+/** Settings: forget the AI timing saved for a song (its file; the main window drops it too). */
+export async function forgetAutoSync(np: SongId) {
   const key = songKey(np);
-  const prefs = await songs.get(key);
-  if (prefs?.aiSync) await songs.set(key, { ...prefs, aiSync: undefined });
+  await removeTiming(np);
   if (isTauri()) await platform.emit("ai-sync-forget", key);
 }

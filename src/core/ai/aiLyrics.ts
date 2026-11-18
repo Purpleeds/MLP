@@ -7,6 +7,7 @@ import { getSettings } from "../settings/store";
 import { trackKey, type NowPlaying } from "../playback/clock";
 import type { LyricLine, Lyrics } from "../lyrics/model";
 import { songKey, songs } from "../lyrics/service";
+import { removeTiming, type SongId } from "./timingFiles";
 import { detectedLanguage, filterSegments, nextChunk, segmentsFrom, segmentsToLines, settle, type WhisperJson } from "./transcribe";
 
 export interface SavedAiLyrics {
@@ -218,9 +219,10 @@ export function useAiLyrics(np: NowPlaying | null, wanted: boolean): Lyrics | nu
 export const useAiLyricsStatus = () => useSyncExternalStore(subscribe, () => status);
 
 /** Settings: throw away a song's AI lyrics (and their auto-sync); the main window starts over. */
-export async function forgetAiLyrics(np: Pick<NowPlaying, "title" | "artist">) {
+export async function forgetAiLyrics(np: SongId) {
   const key = songKey(np);
+  await removeTiming(np, (sig) => sig.startsWith("ai:")); // timing of the AI lyrics only
   const prefs = await songs.get(key);
-  if (prefs) await songs.set(key, { ...prefs, aiLyrics: undefined, aiSync: prefs.aiSync?.sig.startsWith("ai:") ? undefined : prefs.aiSync });
+  if (prefs) await songs.set(key, { ...prefs, aiLyrics: undefined });
   if (isTauri()) await platform.emit("ai-lyrics-forget", key);
 }

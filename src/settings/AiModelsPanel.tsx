@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { isTauri, platform } from "../core/platform";
 import { songs } from "../core/lyrics/service";
+import { clearAllTiming, countTiming } from "../core/ai/timingFiles";
 
 interface Asset {
   id: string;
@@ -26,9 +27,9 @@ interface DownloadProgress {
   error: string | null;
 }
 
-/** Remove auto-sync timing and AI lyrics from every song (pins, offsets and own syncs stay). */
+/** Remove auto-sync timing (files + old songs.json copies) and AI lyrics from every song (pins, offsets and own syncs stay). */
 export async function forgetAllAiData(): Promise<number> {
-  let n = 0;
+  let n = await clearAllTiming().catch(() => 0);
   for (const [k, p] of await songs.entries()) {
     if (!p.aiSync && !p.aiLyrics) continue;
     await songs.set(k, { ...p, aiSync: undefined, aiLyrics: undefined });
@@ -48,7 +49,7 @@ export function AiModelsPanel() {
     const tick = () => void platform.invoke<AiStatus>("ai_status").then((a) => a && setAi(a));
     tick();
     const id = setInterval(tick, 2000);
-    void songs.entries().then((all) => setAiSongs(all.filter(([, p]) => p.aiSync || p.aiLyrics).length));
+    void Promise.all([songs.entries(), countTiming()]).then(([all, files]) => setAiSongs(files + all.filter(([, p]) => p.aiSync || p.aiLyrics).length));
     const off = platform.on<DownloadProgress>("ai-download", (p) =>
       setProgress((x) => {
         const n = { ...x };

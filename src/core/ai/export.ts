@@ -8,6 +8,7 @@ import { romanizeLyrics } from "../romanize";
 import { buildTimeline, type Timeline } from "../timing/timeline";
 import { anchorsOf, applySync, fitMap, lyricsSig, plainToLines, syncLines } from "./autosync";
 import { ALIGN_ROMAN } from "./engine";
+import { loadTiming } from "./timingFiles";
 
 /** Main lines as LRC; lines with exact word times get enhanced <mm:ss.xx> word stamps. */
 export function timelineToLrc(tl: Timeline): string {
@@ -40,8 +41,8 @@ async function syncedLyrics(np: NowPlaying): Promise<Lyrics | null> {
 /** LRC from the AI timing saved for this song, or null when auto-sync hasn't lined anything up yet. */
 export async function aiTimingLrc(np: NowPlaying): Promise<{ lrc: string; lines: number; aligned: number } | null> {
   const lyrics = await syncedLyrics(np);
-  const saved = (await songs.get(songKey(np)))?.aiSync;
-  if (!lyrics || !saved || saved.sig !== lyricsSig(lyrics) || !Object.keys(saved.fixes).length) return null;
+  const saved = lyrics ? await loadTiming(np, lyricsSig(lyrics)).catch(() => null) : null;
+  if (!lyrics || !saved || !Object.keys(saved.fixes).length) return null;
   const lines = syncLines(lyrics, await romanizeLyrics(lyrics, ALIGN_ROMAN).catch(() => null));
   const tl = applySync(buildTimeline(lyrics, "estimated"), lyrics, lines, saved.fixes, fitMap(anchorsOf(lines, saved.fixes)));
   return { lrc: timelineToLrc(tl), lines: lines.length, aligned: lines.filter((l) => saved.fixes[l.idx]).length };
