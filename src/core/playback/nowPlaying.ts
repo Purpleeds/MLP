@@ -4,17 +4,24 @@ import { isTauri, platform } from "../platform";
 import { MOCK_TRACK, mockArtwork } from "../mock/fixtures";
 import { getSettings } from "../settings/store";
 import { PlaybackClock, type NowPlaying } from "./clock";
+import { createSkipHold } from "./skipHold";
 
 export type { NowPlaying };
 export const clock = new PlaybackClock();
 
 let current: NowPlaying | null = null;
+let received: NowPlaying | null = null;
 const listeners = new Set<() => void>();
-const set = (np: NowPlaying | null) => {
-  if (np?.artworkSame && current) np = { ...np, artwork: current.artwork };
+const show = createSkipHold((np) => {
   current = np;
   if (np) clock.update(np);
   listeners.forEach((l) => l());
+});
+const set = (np: NowPlaying | null) => {
+  // "Same artwork" refers to the previous payload, which may still be held back during a skip.
+  if (np?.artworkSame && received) np = { ...np, artwork: received.artwork };
+  received = np;
+  show(np);
 };
 
 let started = false;

@@ -2,6 +2,7 @@
 //! A dedicated MTA thread polls the session manager (cheap, robust against missed events),
 //! emits `now-playing` to the frontend on any change, and executes media-control requests.
 
+use crate::art_cache::ArtCache;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
@@ -158,12 +159,6 @@ fn read_artwork(props: &windows::Media::Control::GlobalSystemMediaTransportContr
     Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(buf)))
 }
 
-struct ArtCache {
-    key: String,
-    art: Option<String>,
-    tries: u8,
-}
-
 fn snapshot(mgr: &Manager, cfg: &MediaConfig, art: &mut ArtCache) -> windows::core::Result<Option<(NowPlaying, Session)>> {
     let Some((s, aumid)) = pick_session(mgr, cfg)? else { return Ok(None) };
     let props = s.TryGetMediaPropertiesAsync()?.join()?;
@@ -174,15 +169,8 @@ fn snapshot(mgr: &Manager, cfg: &MediaConfig, art: &mut ArtCache) -> windows::co
     let artist = props.Artist()?.to_string();
     let album = props.AlbumTitle()?.to_string();
 
-    // Thumbnails sometimes arrive a moment after the title changes: retry a few polls.
-    let key = format!("{aumid}|{title}|{artist}|{album}");
-    if key != art.key {
-        *art = ArtCache { key, art: None, tries: 0 };
-    }
-    if art.art.is_none() && art.tries < 12 {
-        art.tries += 1;
-        art.art = read_artwork(&props);
-    }
+    // Thumbnails can lag behind the title (see art_cache): re-read for a while after a change.
+    let artwork = art.get(&format!("{aumid}|{title}|{artist}|{album}"), || read_artwork(&props));
 
     let info = s.GetPlaybackInfo()?;
     let status = status_str(info.PlaybackStatus()?).to_string();
@@ -204,7 +192,7 @@ fn snapshot(mgr: &Manager, cfg: &MediaConfig, art: &mut ArtCache) -> windows::co
         artist,
         album,
         duration_ms: if timeline_ok { (end - start) as f64 / 1e4 } else { 0.0 },
-        artwork: art.art.clone(),
+        artwork,
         status,
         position_ms: ((pos - start).max(0)) as f64 / 1e4,
         updated_at_ms,
@@ -252,7 +240,7 @@ pub fn start(app: AppHandle) {
                     }
                 }
             };
-            let mut art = ArtCache { key: String::new(), art: None, tries: 0 };
+            let mut art = ArtCache::default();
             let mut last: Option<NowPlaying> = None;
             let mut session: Option<Session> = None;
             let mut next_poll = Instant::now();
