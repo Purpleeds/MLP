@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignToVdb, findVocaDbSong, humanTranslation, pairTranslation, scoreSong, vdbLines, type FetchJson, type VdbSong } from "./vocadb";
+import { alignToVdb, findVocaDbSong, humanTranslation, pairTranslation, romajiKey, scoreSong, vdbLines, type FetchJson, type VdbSong } from "./vocadb";
 
 // Shaped like VocaDB's real 千本桜 entry (id 8394): inline furigana, full-width spaces, trailing spaces.
 const ORIGINAL =
@@ -153,5 +153,38 @@ describe("vocadb pairing shapes", () => {
   });
   it("gives up on stanzas it can't pair safely", () => {
     expect(pairTranslation(["a", "b", "c", "", "d"], ["A", "B", "", "D"])).toEqual([null, null, null, "D"]);
+  });
+});
+
+describe("vocadb romaji bridge", () => {
+  // Shaped like シャルル: the original joins two sung lines, the romanized text and the translation don't.
+  const song: VdbSong = {
+    id: 135628,
+    name: "シャルル",
+    artist: "バルーン feat. v flower",
+    lyrics: [
+      { type: "Original", langs: ["ja"], source: "", url: "", text: "さよならはあなたから言った　それなのに頬を濡らしてしまうの\nそうやって昨日の事も消してしまうなら　もういいよ\n\n花束を抱えて歩いた　意味もなく" },
+      { type: "Romanized", langs: ["und"], source: "", url: "", text: "sayonara wa anata kara itta\nsore nano ni hoo o nurashite shimau no\nsou yatte kinou no koto mo keshite shimau nara\nmou ii yo\n\nhanataba o kakaete aruita\nimi mo naku" },
+      { type: "Translation", langs: ["en"], source: "Wiki", url: "", text: "It was you who said goodbye\nStill, tears run down on your cheeks\nIf you are going to erase memories of yesterday like this,\nthat's enough\n\nI walked holding a bouquet\nwithout any meaning" },
+    ],
+  };
+  const shown = ["さよならはあなたから言った", "それなのに頬を濡らしてしまうの", "そうやって昨日の事も消してしまうなら", "もういいよ", "花束を抱えて歩いた", "意味もなく"];
+
+  it("spells romaji one way", () => {
+    expect(romajiKey("Tōkyō e")).toBe(romajiKey("toukyou he".replace("he", "e")));
+    expect(romajiKey("kimi wo")).toBe(romajiKey("kimi o"));
+    expect(romajiKey("とうきょう")).toBe(romajiKey("tokyo"));
+  });
+
+  it("matches the shown lines through VocaDB's romanized text", () => {
+    const roman = ["sayonara wa anata kara itta", "sore na no ni hoo wo nurashite shimau no", "sō yatte kinō no koto mo keshite shimau nara", "mō ii yo", "hanataba wo kakaete aruita", "imi mo naku"];
+    const h = humanTranslation(song, shown, "en", () => true, roman)!;
+    expect(h.lines).toEqual(["It was you who said goodbye", "Still, tears run down on your cheeks", "If you are going to erase memories of yesterday like this,", "that's enough", "I walked holding a bouquet", "without any meaning"]);
+  });
+
+  it("still finds most lines from the kana alone (no romanizer)", () => {
+    const h = humanTranslation(song, shown, "en")!;
+    expect(h.coverage).toBeGreaterThanOrEqual(0.6);
+    expect(h.lines[0]).toBe("It was you who said goodbye");
   });
 });

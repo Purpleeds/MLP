@@ -2,6 +2,7 @@
 // VocaDB has no timing: its original lyrics are lined up with the synced lyrics we show, and the
 // translation lines that pair with them are put under the matching lines. Lookups are cached
 // (vocadb-cache.json) and spaced out; only the song title goes out (like the LRCLIB lookup).
+import { toRomaji } from "wanakana";
 import { createKv } from "../storage/kv";
 import { cleanArtist, normalize, similarity } from "./query";
 
@@ -190,8 +191,30 @@ const bare = (s: string) => s.replace(/[（(][\p{Script=Hiragana}\p{Script=Katak
 
 const lineSim = (a: string, b: string) => similarity(bare(a), bare(b));
 
+/**
+ * Romaji spelled one way, so "toukyou" / "tōkyō" / "tokyo", "wo" / "o" compare equal. Kana are
+ * converted first; anything else non-Latin (kanji the romanizer didn't read) is dropped.
+ */
+export function romajiKey(s: string): string {
+  return toRomaji(bare(s))
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "")
+    .replace(/m(?=[bmp])/g, "n")
+    .replace(/dzu/g, "zu")
+    .replace(/wo/g, "o")
+    .replace(/ou|oo/g, "o")
+    .replace(/uu/g, "u")
+    .replace(/aa/g, "a")
+    .replace(/ii/g, "i")
+    .replace(/ee|ei/g, "e");
+}
+const romajiSim = (a: string, b: string) => similarity(romajiKey(a), romajiKey(b));
+
 const GOOD = 0.55;
-const gain = (sim: number) => (sim >= GOOD ? sim - 0.3 : -Infinity);
+/** Romaji keys are looser (particles, kanji the romanizer couldn't read): ask for a closer match. */
+const GOOD_ROMAJI = 0.62;
 
 /**
  * Line up shown lyric lines with VocaDB lines (sequence alignment, both in order). A shown line may
@@ -199,7 +222,8 @@ const gain = (sim: number) => (sim >= GOOD ? sim - 0.3 : -Infinity);
  * Returns the VocaDB indices per shown line ([] = no match); for a shared line only the first gets
  * them and the second is marked in `rest`.
  */
-export function alignToVdb(shown: string[], vdb: string[]): { idx: number[][]; rest: boolean[] } {
+export function alignToVdb(shown: string[], vdb: string[], sim = lineSim, good = GOOD): { idx: number[][]; rest: boolean[] } {
+  const gain = (v: number) => (v >= good ? v - 0.3 : -Infinity);
   const n = shown.length;
   const m = vdb.length;
   const dp = Array.from({ length: n + 1 }, () => new Float64Array(m + 1));
@@ -212,9 +236,9 @@ export function alignToVdb(shown: string[], vdb: string[]): { idx: number[][]; r
       const tryMove = (v: number, h: number) => v > best && ((best = v), (how = h));
       if (i) tryMove(dp[i - 1][j], 1);
       if (j) tryMove(dp[i][j - 1], 2);
-      if (i && j && shown[i - 1] && vdb[j - 1]) tryMove(dp[i - 1][j - 1] + gain(lineSim(shown[i - 1], vdb[j - 1])), 3);
-      if (i && j > 1 && shown[i - 1] && vdb[j - 1] && vdb[j - 2]) tryMove(dp[i - 1][j - 2] + gain(lineSim(shown[i - 1], vdb[j - 2] + vdb[j - 1])) + 0.05, 4);
-      if (i > 1 && j && shown[i - 1] && shown[i - 2] && vdb[j - 1]) tryMove(dp[i - 2][j - 1] + gain(lineSim(shown[i - 2] + shown[i - 1], vdb[j - 1])) + 0.05, 5);
+      if (i && j && shown[i - 1] && vdb[j - 1]) tryMove(dp[i - 1][j - 1] + gain(sim(shown[i - 1], vdb[j - 1])), 3);
+      if (i && j > 1 && shown[i - 1] && vdb[j - 1] && vdb[j - 2]) tryMove(dp[i - 1][j - 2] + gain(sim(shown[i - 1], vdb[j - 2] + vdb[j - 1])) + 0.05, 4);
+      if (i > 1 && j && shown[i - 1] && shown[i - 2] && vdb[j - 1]) tryMove(dp[i - 2][j - 1] + gain(sim(shown[i - 2] + shown[i - 1], vdb[j - 1])) + 0.05, 5);
       dp[i][j] = best;
       from[i][j] = how;
     }
@@ -281,9 +305,17 @@ const langIs = (langs: string[], target: string) => langs.some((c) => c.split("-
 
 /**
  * Human translation for the shown lines, or null when VocaDB has none in `target` or its lyrics don't
- * line up well enough with the shown ones (then the machine translation is used).
+ * line up well enough with the shown ones (then the machine translation is used). `shownRoman` = the
+ * shown lines romanized by the app: VocaDB's romanized text often has the same line layout as the
+ * translation when its original doesn't, so it's the bridge for those songs.
  */
-export function humanTranslation(song: VdbSong, shown: string[], target: string, wanted: (i: number) => boolean = () => true): HumanTranslation | null {
+export function humanTranslation(
+  song: VdbSong,
+  shown: string[],
+  target: string,
+  wanted: (i: number) => boolean = () => true,
+  shownRoman?: (string | null)[] | null,
+): HumanTranslation | null {
   const translations = song.lyrics.filter((l) => l.type === "Translation" && langIs(l.langs, target));
   if (!translations.length) return null;
   // The shown lyrics may be in the original script or romanized: try both of VocaDB's versions.
@@ -295,7 +327,10 @@ export function humanTranslation(song: VdbSong, shown: string[], target: string,
   for (const base of bases) {
     const baseLines = vdbLines(base.text);
     const nonBlank = baseLines.filter(Boolean);
-    const { idx: align, rest } = alignToVdb(shown, nonBlank);
+    const romanized = base.type === "Romanized";
+    const { idx: align, rest } = romanized
+      ? alignToVdb(shown.map((t, i) => shownRoman?.[i] || t), nonBlank, romajiSim, GOOD_ROMAJI)
+      : alignToVdb(shown, nonBlank);
     for (const tr of translations) {
       const paired = pairTranslation(baseLines, vdbLines(tr.text));
       const lines = shown.map((_, i) => {

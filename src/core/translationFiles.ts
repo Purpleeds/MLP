@@ -175,7 +175,13 @@ const machineName = (o: TranslateOptions) => (o.provider === "deepl" ? "DeepL" :
 export const translationLabel = (r: Pick<TranslationResult, "kind">, o: TranslateOptions) =>
   r.kind === "human" ? "Human translation · VocaDB" : r.kind === "lyrics" ? "Translation from the lyrics file" : `Machine translation · ${machineName(o)}`;
 
-type Deps = TranslateDeps & { files?: TranslationFiles; onProblem?: (p: TranslateProblem) => void; vocadb?: LookupDeps };
+type Deps = TranslateDeps & {
+  files?: TranslationFiles;
+  onProblem?: (p: TranslateProblem) => void;
+  vocadb?: LookupDeps;
+  /** the lyric lines romanized (asked only when VocaDB's original doesn't line up with its translation) */
+  romanize?: () => Promise<(string | null)[] | null>;
+};
 
 /** VocaDB's human translation lined up with these lyrics, or null (not on VocaDB, none in this language, doesn't fit). */
 async function fromVocaDb(lyrics: Lyrics, song: SongMeta, o: TranslateOptions, deps: Deps) {
@@ -187,7 +193,11 @@ async function fromVocaDb(lyrics: Lyrics, song: SongMeta, o: TranslateOptions, d
   });
   if (!vdb) return null;
   const want = new Set(wantedLines(lyrics));
-  return humanTranslation(vdb, lyrics.lines.map((l) => l.text), o.target, (i) => want.has(i));
+  const shown = lyrics.lines.map((l) => l.text);
+  const first = humanTranslation(vdb, shown, o.target, (i) => want.has(i));
+  if (first || !deps.romanize || !vdb.lyrics.some((l) => l.type === "Romanized")) return first;
+  const roman = await deps.romanize().catch(() => null);
+  return roman ? humanTranslation(vdb, shown, o.target, (i) => want.has(i), roman) : null;
 }
 
 /**

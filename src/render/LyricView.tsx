@@ -282,7 +282,9 @@ function Timed({ lyrics, np, variant, mock, external }: { lyrics: Lyrics; np: No
     const wait = prev.lyrics === lyrics && prev.sig !== keySig ? 900 : lyrics.source === "ai" && prev.lyrics ? 1500 : 0;
     lastTr.current = { lyrics, sig: keySig };
     const t = setTimeout(() => {
-      void getTranslations(lyrics, { ...meta, durationMs: np.durationMs || lyrics.durationMs }, tro, { fetchJson: translationFetch })
+      // VocaDB bridge: romaji of the lines, compared with VocaDB's romanized text (cached by the romanizer).
+      const romanize = () => romanizeLyrics(lyrics, { ...ro, ja: true }).then((ls) => ls.map((l) => l?.text ?? null));
+      void getTranslations(lyrics, { ...meta, durationMs: np.durationMs || lyrics.durationMs }, tro, { fetchJson: translationFetch, romanize })
         .then((r) => alive && setTrans({ for: lyrics, sig: troSig, lines: r.lines, r }))
         .catch((e) => platform.log(`translation: ${e}`));
     }, wait);
