@@ -116,6 +116,12 @@ export class LyricRenderer {
   private destroyed = false;
   /** something is animating (springs, fades, glow) → run at the full frame rate */
   private moving = true;
+  /**
+   * Lines are in their final layout. False after a (re)build or a re-measure: the next frame puts every
+   * line straight at its target (no springs, no stagger, no blur/opacity transitions) instead of flying
+   * them in from the top, and the list stays hidden until that frame has run.
+   */
+  private placed = false;
 
   constructor(
     private root: HTMLElement,
@@ -161,6 +167,7 @@ export class LyricRenderer {
     this.items = [];
     this.focus = -1;
     this.lastT = NaN;
+    this.unplace();
     // Mostly right-to-left song: interlude dots move to the mirrored side too.
     const rtlLines = tl ? tl.lines.filter((l) => lineDir(l.text) === "rtl").length : 0;
     this.root.classList.toggle("rtl-song", !!tl && rtlLines > tl.lines.length / 2);
@@ -286,8 +293,15 @@ export class LyricRenderer {
     return { kind: "line" as const, start: line.start, end: line.end, bg: line.bg, line, el, words, dots: [] };
   }
 
+  /** Hide the lines until the next frame lays them out in place. */
+  private unplace() {
+    this.placed = false;
+    this.list.classList.add("unplaced");
+  }
+
   private measure() {
     if (this.destroyed) return;
+    const oldHeight = this.height;
     this.height = this.root.clientHeight;
     this.fontPx = parseFloat(getComputedStyle(this.root).fontSize) || 28;
     if (this.opts.fitWidth) {
@@ -299,7 +313,15 @@ export class LyricRenderer {
         if (need > room && room > 0) it.el.style.fontSize = `${Math.max(0.6, room / need).toFixed(3)}em`;
       }
     }
-    for (const it of this.items) it.h = it.el.offsetHeight;
+    let changed = this.height !== oldHeight;
+    for (const it of this.items) {
+      const h = it.el.offsetHeight;
+      if (h !== it.h) changed = true;
+      it.h = h;
+    }
+    // New sizes (window resize, fonts loaded, line wrap changed): jump to the new layout rather than
+    // springing every line from where the old layout had it.
+    if (changed && this.placed) this.placed = false;
     this.kick();
   }
 
@@ -360,7 +382,8 @@ export class LyricRenderer {
     // FPS cap: skip frames that come too early.
     // Adaptive frame rate: full rate while lines move; the slow word fill alone looks smooth at 30 fps.
     const fps = this.moving ? this.opts.fps : Math.min(this.opts.fps, 30);
-    if (fps < 60 && now - this.lastFrame < 1000 / fps - 2) {
+    // Placing never waits for the cap: until it runs the lines are hidden.
+    if (this.placed && fps < 60 && now - this.lastFrame < 1000 / fps - 2) {
       this.raf = requestAnimationFrame(this.frame);
       return;
     }
@@ -372,12 +395,14 @@ export class LyricRenderer {
     const jumped = Number.isFinite(this.lastT) && (t < this.lastT - 250 || t > this.lastT + 2000);
     const timeMoved = t !== this.lastT;
     this.lastT = t;
+    // First layout of these lines (needs a laid-out root): everything goes straight to its place.
+    const place = !this.placed && this.height > 0;
 
     // Active item & cascade delays.
     const active = this.focusAt(t);
     const focus = Math.max(0, active);
     if (focus !== this.focus) {
-      const forward = focus === this.focus + 1 && !jumped;
+      const forward = focus === this.focus + 1 && !jumped && !place;
       for (let i = 0; i < this.items.length; i++) {
         const k = i - (focus - 1);
         this.items[i].delayUntil = forward && motion && o.spring ? now + clamp(k, 0, 10) * o.stagger : 0;
@@ -428,7 +453,7 @@ export class LyricRenderer {
       const it = this.items[i];
       if (now >= it.delayUntil) it.shownTarget = it.target;
       // Position
-      if (!motion || !o.spring || jumped || Math.abs(it.shownTarget - it.y) > this.height * 2) {
+      if (place || !motion || !o.spring || jumped || Math.abs(it.shownTarget - it.y) > this.height * 2) {
         it.y = it.shownTarget;
         it.vy = 0;
       } else {
@@ -446,7 +471,7 @@ export class LyricRenderer {
       const isCur = i === active;
       const sTarget = isCur || it.kind === "dots" ? 1 : o.inactiveScale;
       const ds = sTarget - it.scale;
-      it.scale = Math.abs(ds) < 0.0005 || !motion ? sTarget : it.scale + ds * clamp(dt * 9);
+      it.scale = place || Math.abs(ds) < 0.0005 || !motion ? sTarget : it.scale + ds * clamp(dt * 9);
       if (it.scale !== sTarget) moving = true;
 
       if (!visible) {
@@ -500,6 +525,13 @@ export class LyricRenderer {
       if (it.kind === "dots" && isCur) moving = true;
     }
 
+    if (place) {
+      // Styles were written with transitions off (`.unplaced`); resolve them before showing the list,
+      // so blur and opacity don't animate in from their defaults.
+      void this.list.offsetHeight;
+      this.list.classList.remove("unplaced");
+      this.placed = true;
+    }
     this.moving = moving;
     if (moving || timeMoved) this.raf = requestAnimationFrame(this.frame);
     else this.idleTimer = window.setTimeout(() => this.kick(), 200); // paused: poll cheaply
