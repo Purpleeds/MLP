@@ -9,6 +9,7 @@ import { DISPLAY_MODES, type Settings } from "../core/settings/schema";
 import { adjustSongOffset, useSongOffset } from "../core/lyrics/service";
 import { noteManualShow } from "./autoHide";
 import type { NowPlaying } from "../core/playback/clock";
+import { mediaControl } from "../core/playback/nowPlaying";
 
 const OFFSET_STEP = 100;
 
@@ -149,13 +150,31 @@ const ICON = {
   search: "M10 4a6 6 0 0 1 4.8 9.6l4.3 4.3-1.4 1.4-4.3-4.3A6 6 0 1 1 10 4zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",
   lock: "M7 10V8a5 5 0 0 1 10 0v2h1v10H6V10zm2 0h6V8a3 3 0 0 0-6 0z",
   share: "M18 16a3 3 0 0 0-2.4 1.2l-6.7-3.4a3 3 0 0 0 0-1.6l6.7-3.4A3 3 0 1 0 15 7l-6.7 3.4a3 3 0 1 0 0 3.2L15 17a3 3 0 1 0 3-1z",
+  prev: "M6 5h2v14H6zM9.5 12 19 5v14z",
+  next: "M16 5h2v14h-2zM14.5 12 5 19V5z",
+  play: "M7 4.5v15L19.5 12z",
+  pause: "M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z",
   gear: "M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zM10.5 2h3l.5 2.6 1.9.8 2.2-1.5 2.1 2.1-1.5 2.2.8 1.9 2.5.4v3l-2.6.5-.8 1.9 1.5 2.2-2.1 2.1-2.2-1.5-1.9.8-.4 2.5h-3l-.5-2.6-1.9-.8-2.2 1.5-2.1-2.1 1.5-2.2-.8-1.9L2 13.5v-3l2.6-.5.8-1.9-1.5-2.2 2.1-2.1 2.2 1.5 1.9-.8z",
 };
 
-export function Toolbar({ np, actions }: { np: NowPlaying | null; actions: ReturnType<typeof useActions> }) {
+export function Toolbar({ np, actions, playback }: { np: NowPlaying | null; actions: ReturnType<typeof useActions>; playback: boolean }) {
   const offset = useSongOffset(np);
+  const playing = np?.status === "playing";
   return (
     <div className="toolbar" data-no-drag role="toolbar" aria-label="Lyrics window tools">
+      {np && playback && (
+        <span className="toolbar-playback">
+          <button title="Previous track" aria-label="Previous track" onClick={() => void mediaControl({ action: "prev" })}>
+            <I d={ICON.prev} />
+          </button>
+          <button title={playing ? "Pause" : "Play"} aria-label={playing ? "Pause" : "Play"} onClick={() => void mediaControl({ action: "toggle" })}>
+            <I d={playing ? ICON.pause : ICON.play} />
+          </button>
+          <button title="Next track" aria-label="Next track" onClick={() => void mediaControl({ action: "next" })}>
+            <I d={ICON.next} />
+          </button>
+        </span>
+      )}
       <button title="Next display mode" aria-label="Next display mode" onClick={actions.nextMode}>
         <I d={ICON.mode} />
       </button>

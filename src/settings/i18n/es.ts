@@ -22,6 +22,12 @@ export const es: Record<string, string> = {
   "Taskbar bar (one line by the clock)": "Barra de tareas (una línea junto al reloj)",
   Custom: "Personalizado",
   "Taskbar bar sits": "Posición de la barra",
+  "Playback controls": "Controles de reproducción",
+  "Previous, play / pause and next for Spotify or the browser. Mini, overlay and taskbar modes have no room, so there they appear on hover.":
+    "Anterior, reproducir / pausar y siguiente para Spotify o el navegador. Los modos mini, superpuesto y barra de tareas no tienen espacio, así que ahí aparecen al pasar el ratón.",
+  "Show in the window": "Mostrar en la ventana",
+  "Show when the mouse is over the window": "Mostrar al pasar el ratón por la ventana",
+  Hide: "Ocultar",
   "Just above the taskbar, by the clock": "Justo encima de la barra de tareas, junto al reloj",
   "On the taskbar, left of the tray icons (experimental)": "Sobre la barra de tareas, a la izquierda de los iconos (experimental)",
   "Overlay mode: clicks pass through": "Modo superpuesto: los clics la atraviesan",

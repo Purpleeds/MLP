@@ -22,6 +22,12 @@ export const ja: Record<string, string> = {
   "Taskbar bar (one line by the clock)": "タスクバーバー（時計の横に 1 行）",
   Custom: "カスタム",
   "Taskbar bar sits": "タスクバーバーの位置",
+  "Playback controls": "再生コントロール",
+  "Previous, play / pause and next for Spotify or the browser. Mini, overlay and taskbar modes have no room, so there they appear on hover.":
+    "Spotify やブラウザーの前の曲・再生 / 一時停止・次の曲。ミニ、オーバーレイ、タスクバーの各モードでは場所がないため、マウスを重ねたときに表示されます。",
+  "Show in the window": "ウィンドウに表示",
+  "Show when the mouse is over the window": "マウスを重ねたときに表示",
+  Hide: "非表示",
   "Just above the taskbar, by the clock": "タスクバーのすぐ上、時計の近く",
   "On the taskbar, left of the tray icons (experimental)": "タスクバー上、トレイアイコンの左（試験的）",
   "Overlay mode: clicks pass through": "オーバーレイ: クリックを透過",

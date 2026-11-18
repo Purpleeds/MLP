@@ -50,16 +50,13 @@ export type MediaControl =
   | { action: "seek"; ms: number };
 
 export async function mediaControl(c: MediaControl): Promise<void> {
-  if (!isTauri()) {
-    if (c.action === "seek") mockSeek?.(c.ms);
-    return;
-  }
+  if (!isTauri()) return mockControl?.(c);
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("media_control", { control: c });
 }
 
-/** Mock mode: seeking moves the fake clock (for trying click-to-seek in the browser). */
-let mockSeek: ((ms: number) => void) | null = null;
+/** Mock mode: seek / play / pause / prev / next drive the fake clock (for trying controls in the browser). */
+let mockControl: ((c: MediaControl) => void) | null = null;
 
 function startMock(asReal = false) {
   let startedAt = Date.now();
@@ -72,23 +69,33 @@ function startMock(asReal = false) {
   const artwork = mockArtwork();
   // Dev aid: ?t=seconds starts the mock clock at that position.
   const startAt = Number(new URLSearchParams(location.search).get("t")) * 1000 || 0;
+  let pausedAt: number | null = null;
   const sample = (): NowPlaying => {
-    const elapsed = (Date.now() - startedAt + startAt) % loop;
+    const now = pausedAt ?? Date.now();
+    const elapsed = (now - startedAt + startAt) % loop;
     return {
       sourceApp: "mock",
       sourceKind: asReal ? "other" : "mock",
       ...track,
       artwork,
-      status: "playing",
+      status: pausedAt === null ? "playing" : "paused",
       positionMs: elapsed,
       updatedAtMs: Date.now(),
-      rate: 1,
+      rate: pausedAt === null ? 1 : 0,
       timelineOk: true,
       canSeek: true,
     };
   };
-  mockSeek = (ms) => {
-    startedAt = Date.now() + startAt - ms;
+  mockControl = (c) => {
+    const now = pausedAt ?? Date.now();
+    const pause = c.action === "pause" || (c.action === "toggle" && pausedAt === null);
+    const play = c.action === "play" || (c.action === "toggle" && pausedAt !== null);
+    if (c.action === "seek" || c.action === "prev" || c.action === "next") startedAt = now + startAt - (c.action === "seek" ? c.ms : 0);
+    else if (pause && pausedAt === null) pausedAt = Date.now();
+    else if (play && pausedAt !== null) {
+      startedAt += Date.now() - pausedAt;
+      pausedAt = null;
+    }
     set(sample());
   };
   set(sample());

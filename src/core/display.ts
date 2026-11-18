@@ -19,8 +19,19 @@ export const MODE_ELEMENTS: Record<Exclude<DisplayMode, "custom">, Elements> = {
   bar: E(["lyrics"]),
 };
 
-export const elementsFor = (s: Settings): Elements =>
-  s.layout.mode === "custom" ? s.layout.elements : MODE_ELEMENTS[s.layout.mode];
+/** Modes with room for playback controls inside the window (the rest get them in the hover toolbar). */
+const INLINE_CONTROLS = new Set<DisplayMode>(["full", "lyrics-title", "lyrics", "card", "title", "custom"]);
+
+export function elementsFor(s: Settings): Elements {
+  const { mode, controls } = s.layout;
+  const el = mode === "custom" ? s.layout.elements : MODE_ELEMENTS[mode];
+  if (controls === "never" && el.controls) return { ...el, controls: false };
+  if (controls === "always" && !el.controls && INLINE_CONTROLS.has(mode)) return { ...el, controls: true };
+  return el;
+}
+
+/** Playback buttons in the hover toolbar: unless turned off or already shown in the window. */
+export const toolbarControls = (s: Settings): boolean => s.layout.controls !== "never" && !elementsFor(s).controls;
 
 /** Title/artist for display: YouTube-style "Artist - Song (Official Video)" cleaned up. */
 export function displayMeta(np: Pick<NowPlaying, "title" | "artist" | "album" | "sourceKind">) {

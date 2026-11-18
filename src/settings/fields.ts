@@ -71,6 +71,17 @@ export const SECTIONS: Section[] = [
           { kind: "select", path: "layout.mode", label: "Display mode", options: DISPLAY_MODES.map((m) => ({ value: m.id, label: m.label })) },
           {
             kind: "select",
+            path: "layout.controls",
+            label: "Playback controls",
+            help: "Previous, play / pause and next for Spotify or the browser. Mini, overlay and taskbar modes have no room, so there they appear on hover.",
+            options: [
+              { value: "always", label: "Show in the window" },
+              { value: "hover", label: "Show when the mouse is over the window" },
+              { value: "never", label: "Hide" },
+            ],
+          },
+          {
+            kind: "select",
             path: "layout.barPlacement",
             label: "Taskbar bar sits",
             options: [

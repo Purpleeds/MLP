@@ -5,7 +5,7 @@ import { detectGpu } from "../core/settings/light";
 import { updateFeed } from "../core/version";
 import type { DisplayMode, Elements } from "../core/settings/schema";
 import { pushMediaConfig, useNowPlaying, type NowPlaying } from "../core/playback/nowPlaying";
-import { displayMeta, elementsFor } from "../core/display";
+import { displayMeta, elementsFor, toolbarControls } from "../core/display";
 import { useArtwork } from "../core/art/hires";
 import { useSpotifyTrack } from "../core/spotify";
 import { AiIndicator } from "./AiIndicator";
@@ -161,6 +161,7 @@ function Body({ np, mode, el, wide, aspect, art }: { np: NowPlaying; mode: Displ
       <div className="title-row">
         {el.art && <Art src={art} className="tiny" />}
         <Marquee className="title-text">{el.artist ? `${m.title} — ${m.artist}` : m.title}</Marquee>
+        {el.controls && <Controls np={np} />}
       </div>
     );
   }
@@ -403,7 +404,7 @@ export default function App() {
       )}
 
       {s.debug.overlay && <DebugOverlay np={live} />}
-      {!locked && <Toolbar np={np} actions={actions} />}
+      {!locked && <Toolbar np={np} actions={actions} playback={toolbarControls(s)} />}
       {s.ai.indicator && s.ai.listen && mode !== "overlay" && <AiIndicator />}
       {toast.node}
       {s.app.screenReader && <LineAnnouncer />}

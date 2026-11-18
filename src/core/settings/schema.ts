@@ -129,6 +129,8 @@ export interface Settings {
     overlayClickThrough: boolean;
     /** taskbar bar: just above the taskbar, or on it next to the tray icons (experimental) */
     barPlacement: "above" | "taskbar";
+    /** prev / play-pause / next: always in the window, in the hover toolbar, or nowhere */
+    controls: "always" | "hover" | "never";
   };
   timing: {
     /** estimated = per-word fill from syllables; linear = even sweep; line = highlight whole line */
@@ -339,6 +341,7 @@ export const DEFAULT_SETTINGS: Settings = {
     hiResArt: true,
     overlayClickThrough: true,
     barPlacement: "above",
+    controls: "hover",
   },
   timing: {
     wordMode: "estimated",

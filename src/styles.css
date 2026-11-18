@@ -214,14 +214,17 @@ img.bg-art.spin {
   outline: 2px solid rgba(255, 255, 255, 0.7);
   outline-offset: 3px;
 }
-.np .controls {
+.np .controls,
+.title-row .controls {
   gap: 10px;
 }
-.np .controls button {
+.np .controls button,
+.title-row .controls button {
   width: 18px;
   height: 18px;
 }
-.np .controls button.main {
+.np .controls button.main,
+.title-row .controls button.main {
   width: 22px;
   height: 22px;
 }
@@ -805,8 +808,11 @@ img.bg-art.spin {
   right: 10px;
   z-index: 8;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 2px;
+  max-width: calc(100% - 20px);
   padding: 3px;
   border-radius: 10px;
   background: rgba(20, 18, 24, 0.62);
@@ -837,6 +843,13 @@ img.bg-art.spin {
 }
 .toolbar button:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+.toolbar-playback {
+  display: flex;
+  gap: 2px;
+  padding-right: 3px;
+  margin-right: 1px;
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
 }
 .toolbar-offset {
   min-width: 30px;
