@@ -362,6 +362,14 @@ img.bg-art.spin {
   will-change: transform;
   transition: filter 0.45s ease, opacity 0.3s linear;
 }
+/* Until the renderer has laid the lines out (first frame after loading), they stay hidden and
+   don't animate, so they never show stacked at the top before moving into place. */
+.lr-list.unplaced {
+  visibility: hidden;
+}
+.lr-list.unplaced .lr-item {
+  transition: none;
+}
 .lr-root[data-align="center"] {
   text-align: center;
 }
@@ -720,6 +728,31 @@ img.bg-art.spin {
 }
 .lr-message-action {
   margin-top: 6px;
+}
+/* Instrumental / soundtrack: no lyrics in this song. */
+.lr-instrumental-icon {
+  font-size: calc(var(--lr-size) * 1.1);
+  line-height: 1;
+  opacity: 0.7;
+  margin-bottom: 2px;
+}
+.mode-bar .lr-instrumental,
+.mode-mini .lr-instrumental,
+.mode-overlay .lr-instrumental {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+.mode-bar .lr-instrumental-icon,
+.mode-mini .lr-instrumental-icon,
+.mode-overlay .lr-instrumental-icon {
+  font-size: 1em;
+  margin: 0;
+}
+.mode-mini .lr-instrumental .lr-message-detail,
+.mode-overlay .lr-instrumental .lr-message-detail {
+  display: none;
 }
 /* AI lyrics: turn on listening / download Whisper from the lyric view. */
 .lr-ai-btn {

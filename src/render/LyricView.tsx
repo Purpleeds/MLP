@@ -36,6 +36,7 @@ import { lineAt } from "../core/timing/timeline";
 import { applySync, plainToLines } from "../core/ai/autosync";
 import { useAiLyrics } from "../core/ai/aiLyrics";
 import { AiLyricsMessage } from "./AiLyricsMessage";
+import { noLyricsHint } from "../core/lyrics/instrumental";
 import { MOCK_TRACK } from "../core/mock/fixtures";
 import { LyricRenderer, type RendererOptions } from "./LyricRenderer";
 
@@ -170,6 +171,19 @@ function Message({ title, detail }: { title: string; detail?: string }) {
   );
 }
 
+/** A song without singing: a clear "no lyrics" state instead of a search miss. */
+function NoSinging({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="lr-message lr-instrumental" role="status">
+      <span className="lr-instrumental-icon" aria-hidden="true">
+        ♪
+      </span>
+      <p className="lr-message-title">{title}</p>
+      <p className="lr-message-detail">{detail}</p>
+    </div>
+  );
+}
+
 function Loading() {
   return (
     <div className="lr-loading" aria-label="Looking for lyrics">
@@ -273,15 +287,17 @@ export function LyricView({ np, variant = "normal" }: { np: NowPlaying; variant?
   const adNow = skip && adMarker(np);
   const longVideo = skip && isLongVideo(np);
   const st = useLyrics(adNow || longVideo ? null : np);
-  // Step 16: no lyrics anywhere → write them with AI from what MLP hears.
-  const aiWanted = st.status === "notfound" && s.ai.lyrics && !adNow && !longVideo && np.sourceKind !== "mock";
+  // Nothing found, but the title / album says there's no singing ("Instrumental", "Off Vocal", a score…).
+  const hint = st.status === "notfound" ? noLyricsHint(np) : null;
+  // Step 16: no lyrics anywhere → write them with AI from what MLP hears (not for marked instrumentals).
+  const aiWanted = st.status === "notfound" && hint !== "instrumental" && s.ai.lyrics && !adNow && !longVideo && np.sourceKind !== "mock";
   const ai = useAiLyrics(np, aiWanted);
   let body;
   if (adNow || (skip && st.status === "found" && isAd(np, lyricsLength(st.lyrics)))) body = <Message title="Ad" detail="Lyrics continue after the ad." />;
   else if (longVideo) body = <Message title="Long video" detail="Lyrics are looked up for songs, not for mixes, streams or videos over 15 minutes." />;
   else if (st.status === "found") {
     const { lyrics } = st;
-    if (lyrics.kind === "instrumental") body = <Message title="♪" detail="Instrumental" />;
+    if (lyrics.kind === "instrumental") body = <NoSinging title="Instrumental" detail="This song has no lyrics." />;
     else if (lyrics.kind === "plain") body = <PlainWithSync lyrics={lyrics} np={np} variant={variant} />;
     else body = <Timed lyrics={lyrics} np={np} variant={variant} />;
   } else if (st.status === "loading" || st.status === "idle") body = <Loading />;
@@ -291,8 +307,11 @@ export function LyricView({ np, variant = "normal" }: { np: NowPlaying; variant?
     ) : (
       <Message title="Can't reach LRCLIB" detail="Check your internet connection. Lyrics load as soon as you're back online." />
     );
-  else if (np.sourceKind === "mock") body = <Timed lyrics={MOCK_LYRICS} np={np} variant={variant} mock />;
   else if (ai) body = <Timed lyrics={ai} np={np} variant={variant} />;
+  else if (hint === "instrumental") body = <NoSinging title="Instrumental" detail="This version has no lyrics." />;
+  // Soundtracks are usually instrumental; AI lyrics (when set up) still listen, in case it's sung.
+  else if (hint === "soundtrack") body = <NoSinging title="Soundtrack" detail="No lyrics found. This looks like an instrumental piece." />;
+  else if (np.sourceKind === "mock") body = <Timed lyrics={MOCK_LYRICS} np={np} variant={variant} mock />;
   else if (aiWanted) body = <AiLyricsMessage title="No lyrics for this song" />;
   else body = <Message title="No lyrics for this song" detail={`LRCLIB has no match for “${np.title}”.`} />;
   return (
