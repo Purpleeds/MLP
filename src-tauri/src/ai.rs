@@ -1,6 +1,7 @@
 //! Local AI: on-demand downloads (whisper.cpp runtime + Whisper models) into the app data folder,
-//! and a `whisper-server` sidecar kept running on 127.0.0.1 for transcription.
-//! Nothing is bundled with the installer; audio never leaves the PC.
+//! and a `whisper-server` sidecar kept running on 127.0.0.1 for transcription. Audio never leaves the PC.
+//! The full installer puts every asset in `<install folder>/ai` (same layout as the app-data folder);
+//! that copy is used first, and anything missing there is downloaded into the app-data folder.
 
 use futures_util::StreamExt;
 use serde::Serialize;
@@ -111,7 +112,7 @@ pub const CATALOG: &[Asset] = &[
         url: "https://github.com/lindera/lindera/releases/download/v6.2.0/lindera-ipadic-6.2.0.zip",
         size_mb: 11,
         sha256: "5ed4bba6b429030b0387df67d40d5751d35dedef0306f4bac6d957cad5f04b72",
-        note: "for romaji; downloaded when the first Japanese song plays",
+        note: "for romaji (downloaded on the first Japanese song if the installer didn't include it)",
     },
     Asset {
         id: "mms-aligner",
@@ -127,8 +128,42 @@ pub const CATALOG: &[Asset] = &[
 static DOWNLOADING: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 static SERVER: Mutex<Option<(Child, u16, String)>> = Mutex::new(None);
 
+/// Where downloads go (and where AI data like per-song timing is kept).
 pub fn ai_dir(app: &AppHandle) -> PathBuf {
     app.path().app_data_dir().unwrap_or_else(|_| std::env::temp_dir()).join("ai")
+}
+
+/// AI files that came with the installer: `<install folder>/ai` (`MLP_BUNDLED_AI` overrides it).
+pub fn bundled_dir() -> Option<PathBuf> {
+    let dir = match std::env::var_os("MLP_BUNDLED_AI") {
+        Some(d) => PathBuf::from(d),
+        None => std::env::current_exe().ok()?.parent()?.join("ai"),
+    };
+    dir.is_dir().then_some(dir)
+}
+
+/// Folders an asset may be in, the installer's copy first.
+fn search_dirs(app: &AppHandle) -> Vec<PathBuf> {
+    bundled_dir().into_iter().chain(std::iter::once(ai_dir(app))).collect()
+}
+
+/// The folder holding a usable copy of the asset, if any.
+fn locate(app: &AppHandle, a: &Asset) -> Option<PathBuf> {
+    first_with(search_dirs(app), a)
+}
+
+fn first_with(dirs: Vec<PathBuf>, a: &Asset) -> Option<PathBuf> {
+    dirs.into_iter().find(|d| installed(d, a))
+}
+
+fn is_bundled(a: &Asset) -> bool {
+    bundled_dir().map(|d| installed(&d, a)).unwrap_or(false)
+}
+
+/// Path of a model file: the installer's copy, else the downloaded one (which may not exist yet).
+pub fn model_file(app: &AppHandle, id: &str) -> PathBuf {
+    let a = asset(id).expect("model in the catalog");
+    asset_path(&locate(app, a).unwrap_or_else(|| ai_dir(app)), a)
 }
 
 fn asset(id: &str) -> Option<&'static Asset> {
@@ -160,10 +195,15 @@ fn marker(a: &Asset) -> &'static str {
     }
 }
 
-/// The unpacked IPADIC folder (the one holding metadata.json), if downloaded.
-pub fn ipadic_dir(app: &AppHandle) -> Option<PathBuf> {
+/// The unpacked IPADIC folder (the one holding metadata.json) under an AI folder.
+fn ipadic_in(dir: &Path) -> Option<PathBuf> {
     let a = asset("ipadic")?;
-    find_exe(&asset_path(&ai_dir(app), a), marker(a)).and_then(|p| p.parent().map(Path::to_path_buf))
+    find_exe(&asset_path(dir, a), marker(a)).and_then(|p| p.parent().map(Path::to_path_buf))
+}
+
+/// The IPADIC folder to use: the installer's copy, else the downloaded one.
+pub fn ipadic_dir(app: &AppHandle) -> Option<PathBuf> {
+    search_dirs(app).iter().find_map(|d| ipadic_in(d))
 }
 
 #[derive(Serialize)]
@@ -190,16 +230,17 @@ pub async fn jp_dict_ensure(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let a = asset("ipadic").ok_or("unknown download")?;
-    if let Some(dir) = ipadic_dir(&app) {
+    for dir in search_dirs(&app).iter().filter_map(|d| ipadic_in(d)) {
         if crate::japanese::dict_loads(&dir) {
             crate::japanese::set_dict_dir(Some(dir));
             return Ok(());
         }
-        eprintln!("[japanese] dictionary in {} doesn't load; downloading it again", dir.display());
-        crate::japanese::set_dict_dir(None);
-        let _ = std::fs::remove_dir_all(asset_path(&ai_dir(&app), a));
+        eprintln!("[japanese] dictionary in {} doesn't load", dir.display());
     }
-    download(&app, "ipadic").await?;
+    // Only the downloaded copy is replaced; the installer's copy is left alone.
+    crate::japanese::set_dict_dir(None);
+    let _ = std::fs::remove_dir_all(asset_path(&ai_dir(&app), a));
+    download_to_app_data(&app, "ipadic").await?;
     if crate::japanese::dict_ready() {
         Ok(())
     } else {
@@ -228,6 +269,8 @@ pub struct AssetStatus {
     #[serde(flatten)]
     pub asset: Asset,
     pub installed: bool,
+    /// came with the installer (can't be deleted from the app)
+    pub bundled: bool,
     pub downloading: bool,
 }
 
@@ -266,7 +309,10 @@ pub async fn ai_status(app: AppHandle) -> AiStatus {
         gpu,
         assets: CATALOG
             .iter()
-            .map(|a| AssetStatus { asset: *a, installed: installed(&dir, a), downloading: busy.contains(a.id) })
+            .map(|a| {
+                let bundled = is_bundled(a);
+                AssetStatus { asset: *a, installed: bundled || installed(&dir, a), bundled, downloading: busy.contains(a.id) }
+            })
             .collect(),
         server: SERVER.lock().unwrap().as_ref().map(|(_, port, model)| format!("127.0.0.1:{port} · {model}")),
         dir: dir.display().to_string(),
@@ -283,8 +329,18 @@ struct Progress {
     error: Option<String>,
 }
 
-/// Download (resumable) and, for runtimes, extract. Emits `ai-download` progress events.
+/// Download (resumable) and, for runtimes, extract, unless the installer's copy is there.
+/// Emits `ai-download` progress events.
 pub async fn download(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
+    let a = asset(id).ok_or("unknown download")?;
+    if let Some(dir) = bundled_dir().filter(|d| installed(d, a)) {
+        return Ok(asset_path(&dir, a));
+    }
+    download_to_app_data(app, id).await
+}
+
+/// Download into the app-data folder (skipped when a copy is already there).
+async fn download_to_app_data(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
     let a = asset(id).ok_or("unknown download")?;
     {
         let mut g = DOWNLOADING.lock().unwrap();
@@ -309,7 +365,7 @@ pub async fn download(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
     let result = result.map_err(|e| format!("{}: {}", a.name, e.msg));
     DOWNLOADING.lock().unwrap().as_mut().map(|s| s.remove(id));
     if id == "ipadic" && result.is_ok() {
-        crate::japanese::set_dict_dir(ipadic_dir(app));
+        crate::japanese::set_dict_dir(ipadic_in(&ai_dir(app)));
         let _ = app.emit("jp-dict-ready", ());
     }
     let _ = app.emit(
@@ -461,6 +517,9 @@ pub async fn ai_delete(app: AppHandle, id: String) -> Result<(), String> {
         crate::japanese::set_dict_dir(None);
     }
     let a = asset(&id).ok_or("unknown")?;
+    if is_bundled(a) {
+        return Err(format!("{} came with the installer; uninstall MLP to remove it.", a.name));
+    }
     let p = asset_path(&ai_dir(&app), a);
     if p.is_dir() {
         std::fs::remove_dir_all(&p).map_err(|e| e.to_string())
@@ -491,20 +550,25 @@ pub async fn ensure_server(app: &AppHandle, runtime: &str, model: &str) -> Resul
         }
     }
     stop_server();
-    let dir = ai_dir(app);
     let rt = asset(runtime).ok_or("unknown runtime")?;
     let md = asset(model).ok_or("unknown model")?;
-    let exe = find_exe(&asset_path(&dir, rt), "whisper-server.exe").ok_or("Whisper engine isn't downloaded")?;
-    let model_path = asset_path(&dir, md);
-    if !model_path.exists() {
-        return Err("Whisper model isn't downloaded".into());
-    }
+    let rt_dir = locate(app, rt).ok_or("Whisper engine isn't downloaded")?;
+    let exe = find_exe(&asset_path(&rt_dir, rt), "whisper-server.exe").ok_or("Whisper engine isn't downloaded")?;
+    let model_path = asset_path(&locate(app, md).ok_or("Whisper model isn't downloaded")?, md);
     let port = free_port();
     // Step 17 limits: CPU threads, below-normal priority; -sns drops "(music)"-style non-speech tokens.
     const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
     let priority = if crate::perf::low_priority() { BELOW_NORMAL_PRIORITY_CLASS } else { 0 };
     let threads = crate::perf::threads().to_string();
-    let child = Command::new(&exe)
+    let mut cmd = Command::new(&exe);
+    // The engines need the MSVC + OpenMP runtime DLLs; the installer puts them next to mlp.exe, so a PC
+    // without the VC++ redistributable finds them through PATH (Windows searches the exe's folder first).
+    if let Some(app_dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf)) {
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        let joined = std::env::join_paths(std::iter::once(app_dir).chain(std::env::split_paths(&path))).unwrap_or(path);
+        cmd.env("PATH", joined);
+    }
+    let child = cmd
         .current_dir(exe.parent().unwrap())
         .args(["-m", &model_path.to_string_lossy(), "--host", "127.0.0.1", "--port", &port.to_string(), "-l", "auto", "-t", &threads, "-sns"])
         .stdout(Stdio::null())
@@ -576,9 +640,9 @@ pub struct TranscribeRequest {
 }
 
 /// Which Whisper engine to run: the GPU build when asked for / available and installed, else the CPU build.
-fn pick_runtime(dir: &Path, pref: &str) -> Result<&'static str, String> {
-    let gpu_ok = installed(dir, asset("whisper-cuda").unwrap());
-    let cpu_ok = installed(dir, asset("whisper-cpu").unwrap());
+fn pick_runtime(app: &AppHandle, pref: &str) -> Result<&'static str, String> {
+    let gpu_ok = locate(app, asset("whisper-cuda").unwrap()).is_some();
+    let cpu_ok = locate(app, asset("whisper-cpu").unwrap()).is_some();
     match pref {
         "gpu" if gpu_ok => Ok("whisper-cuda"),
         "cpu" if cpu_ok => Ok("whisper-cpu"),
@@ -607,13 +671,12 @@ pub async fn ai_transcribe(app: AppHandle, req: TranscribeRequest) -> Result<ser
         None if req.vocals => return Err("those vocals aren't isolated yet".into()),
         None => (crate::capture::snapshot_covered(&req.key, req.from_ms, req.to_ms).ok_or("that part wasn't captured")?, "mix"),
     };
-    let dir = ai_dir(&app);
     let pref = if GPU_FAILED.load(std::sync::atomic::Ordering::Relaxed) { "cpu" } else { req.runtime.as_str() };
-    let mut runtime = pick_runtime(&dir, pref)?;
+    let mut runtime = pick_runtime(&app, pref)?;
     let t0 = Instant::now();
     let port = match ensure_server(&app, runtime, &req.model).await {
         Ok(p) => p,
-        Err(e) if runtime == "whisper-cuda" && installed(&dir, asset("whisper-cpu").unwrap()) => {
+        Err(e) if runtime == "whisper-cuda" && locate(&app, asset("whisper-cpu").unwrap()).is_some() => {
             // The CUDA build can fail on new GPUs / drivers: remember it and use the CPU build.
             eprintln!("[whisper] GPU engine failed ({e}); using the CPU engine");
             GPU_FAILED.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -728,6 +791,37 @@ mod tests {
         let res = tauri::async_runtime::block_on(start_download(a.url, 0)).map_err(|e| e.msg).unwrap();
         assert_eq!(res.status().as_u16(), 200);
         assert_eq!(res.content_length(), Some(10_519_550));
+    }
+
+    #[test]
+    fn installer_copy_comes_first_then_download_folder() {
+        let tmp = std::env::temp_dir().join(format!("mlp-bundled-{}", std::process::id()));
+        let (bundled, data) = (tmp.join("install").join("ai"), tmp.join("appdata").join("ai"));
+        let model = asset("mms-aligner").unwrap();
+        let engine = asset("whisper-cpu").unwrap();
+        let dirs = || vec![bundled.clone(), data.clone()];
+        assert_eq!(first_with(dirs(), model), None);
+        // downloaded copy only
+        std::fs::create_dir_all(data.join("models")).unwrap();
+        std::fs::write(asset_path(&data, model), vec![0u8; 1_100_000]).unwrap();
+        assert_eq!(first_with(dirs(), model), Some(data.clone()));
+        // the installer's copy wins; runtimes count once their exe is unpacked (in any subfolder)
+        std::fs::create_dir_all(bundled.join("models")).unwrap();
+        std::fs::write(asset_path(&bundled, model), vec![0u8; 1_100_000]).unwrap();
+        assert_eq!(first_with(dirs(), model), Some(bundled.clone()));
+        let exe_dir = asset_path(&bundled, engine).join("Release");
+        std::fs::create_dir_all(&exe_dir).unwrap();
+        assert_eq!(first_with(dirs(), engine), None);
+        std::fs::write(exe_dir.join("whisper-server.exe"), b"x").unwrap();
+        assert_eq!(first_with(dirs(), engine), Some(bundled.clone()));
+        assert_eq!(ipadic_in(&bundled), None);
+        // MLP_BUNDLED_AI points at a test folder
+        // SAFETY: no other test reads or writes MLP_BUNDLED_AI.
+        unsafe { std::env::set_var("MLP_BUNDLED_AI", &bundled) };
+        assert_eq!(bundled_dir(), Some(bundled.clone()));
+        assert!(is_bundled(model) && !is_bundled(asset("base").unwrap()));
+        unsafe { std::env::remove_var("MLP_BUNDLED_AI") };
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

@@ -11,6 +11,8 @@ interface Asset {
   kind: string;
   note: string;
   installed: boolean;
+  /** came with the installer: can't be deleted here */
+  bundled?: boolean;
   downloading: boolean;
   sizeMb: number;
 }
@@ -83,7 +85,9 @@ export function AiModelsPanel() {
                   {a.sizeMb} MB · {a.note}
                 </span>
               </div>
-              {a.installed ? (
+              {a.bundled ? (
+                <span className="help">Included</span>
+              ) : a.installed ? (
                 <button
                   className="btn quiet"
                   onClick={() =>

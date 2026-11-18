@@ -301,7 +301,7 @@ mod imp {
 }
 
 fn model_path(app: &tauri::AppHandle) -> std::path::PathBuf {
-    crate::ai::ai_dir(app).join("models").join(format!("{MODEL_ID}.bin"))
+    crate::ai::model_file(app, MODEL_ID)
 }
 
 #[tauri::command]

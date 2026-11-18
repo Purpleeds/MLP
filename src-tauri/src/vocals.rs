@@ -480,7 +480,7 @@ mod imp {
 }
 
 fn model_path(app: &tauri::AppHandle) -> std::path::PathBuf {
-    crate::ai::ai_dir(app).join("models").join("htdemucs-vocals.bin")
+    crate::ai::model_file(app, "htdemucs-vocals")
 }
 
 #[tauri::command]

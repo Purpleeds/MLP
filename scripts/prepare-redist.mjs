@@ -46,4 +46,9 @@ function vcRedistDir() {
 }
 const crt = vcRedistDir();
 for (const f of ["msvcp140.dll", "msvcp140_1.dll", "vcruntime140.dll", "vcruntime140_1.dll"]) copyFileSync(join(crt, f), join(out, f));
-console.log(`[redist] DirectML + MSVC runtime → ${out}`);
+// OpenMP runtime: the whisper.cpp engines (ggml) import VCOMP140.DLL; the app puts its own folder on their
+// PATH, so a PC without the VC++ redistributable can still run them.
+const omp = readdirSync(dirname(crt)).find((d) => /^Microsoft\.VC\d+\.OpenMP$/i.test(d));
+if (!omp || !existsSync(join(dirname(crt), omp, "vcomp140.dll"))) throw new Error(`vcomp140.dll not found next to ${crt}`);
+copyFileSync(join(dirname(crt), omp, "vcomp140.dll"), join(out, "vcomp140.dll"));
+console.log(`[redist] DirectML + MSVC runtime + OpenMP → ${out}`);
