@@ -21,6 +21,8 @@ export interface SavedAiLyrics {
 }
 
 export interface AiLyricsStatus {
+  /** the engine is running for the current song (it has no lyrics anywhere) */
+  active?: boolean;
   phase: "off" | "listening" | "transcribing" | "paused" | "done" | "error";
   detail: string;
   lines: number;
@@ -233,6 +235,7 @@ async function start(np: NowPlaying) {
   data = saved?.v === 1 ? saved : { v: 1, lines: [], doneTo: 0, lang: null, complete: false, model: getSettings().ai.whisperModel };
   const listen = getSettings().ai.listen;
   setStatus({
+    active: true,
     phase: listen ? "listening" : "off",
     need: listen ? undefined : "listen",
     download: undefined,
@@ -258,7 +261,7 @@ function stop() {
   data = null;
   clearInterval(timer);
   timer = 0;
-  setStatus({ phase: "off", detail: "", lines: 0, need: undefined, download: undefined });
+  setStatus({ active: false, phase: "off", detail: "", lines: 0, need: undefined, download: undefined });
 }
 
 let bridged = false;

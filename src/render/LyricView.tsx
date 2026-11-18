@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { NowPlaying } from "../core/playback/clock";
 import { clock, mediaControl } from "../core/playback/nowPlaying";
 import type { Lyrics } from "../core/lyrics/model";
-import { useLyrics, useSongOffset } from "../core/lyrics/service";
+import { useAiLyricsOff, useLyrics, useSongOffset } from "../core/lyrics/service";
 import { useSettings } from "../core/settings/store";
 import type { Settings } from "../core/settings/schema";
 import type { Timeline } from "../core/timing/timeline";
@@ -306,8 +306,10 @@ export function LyricView({ np, variant = "normal" }: { np: NowPlaying; variant?
   const st = useLyrics(adNow || longVideo ? null : np);
   // Nothing found, but the title / album says there's no singing ("Instrumental", "Off Vocal", a score…).
   const hint = st.status === "notfound" ? noLyricsHint(np) : null;
-  // Step 16: no lyrics anywhere → write them with AI from what MLP hears (not for marked instrumentals).
-  const aiWanted = st.status === "notfound" && hint !== "instrumental" && s.ai.lyrics && !adNow && !longVideo && np.sourceKind !== "mock";
+  // Step 16: no lyrics anywhere → write them with AI from what MLP hears (not for marked instrumentals,
+  // nor for songs where the toolbar turned AI lyrics off).
+  const aiOff = useAiLyricsOff(np);
+  const aiWanted = st.status === "notfound" && hint !== "instrumental" && s.ai.lyrics && aiOff === false && !adNow && !longVideo && np.sourceKind !== "mock";
   const ai = useAiLyrics(np, aiWanted);
   let body;
   if (adNow || (skip && st.status === "found" && isAd(np, lyricsLength(st.lyrics)))) body = <Message title="Ad" detail="Lyrics continue after the ad." />;
@@ -330,7 +332,7 @@ export function LyricView({ np, variant = "normal" }: { np: NowPlaying; variant?
   else if (hint === "soundtrack") body = <NoSinging title="Soundtrack" detail="No lyrics found. This looks like an instrumental piece." />;
   else if (np.sourceKind === "mock") body = <Timed lyrics={MOCK_LYRICS} np={np} variant={variant} mock />;
   else if (aiWanted) body = <AiLyricsMessage title="No lyrics for this song" />;
-  else body = <Message title="No lyrics for this song" detail={`LRCLIB has no match for “${np.title}”.`} />;
+  else body = <Message title="No lyrics for this song" detail={`LRCLIB has no match for “${np.title}”.${aiOff && s.ai.lyrics ? " AI lyrics are off for this song." : ""}`} />;
   return (
     <section className={`lyrics-area ${variant}`}>
       {body}

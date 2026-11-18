@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { isTauri } from "./platform";
 import { createKv } from "./storage/kv";
 import { getSettings } from "./settings/store";
+import { clampInto, safeAreaOf } from "./safeArea";
 
 export interface Rect {
   x: number;
@@ -41,6 +42,7 @@ export function fromRelative(r: RelPos, w: number, h: number, area: Rect): { x: 
 
 interface Mon {
   name: string | null;
+  scaleFactor: number;
   position: { x: number; y: number };
   size: { width: number; height: number };
   workArea: { position: { x: number; y: number }; size: { width: number; height: number } };
@@ -76,15 +78,16 @@ export function useWindowPlacement() {
         const mon = (await currentMonitor()) as Mon | null;
         if (!mon) return;
         let r = await rectNow();
-        const area = areaOf(mon);
-        if (getSettings().window.snapEdges) {
-          const scale = (mon as unknown as { scaleFactor?: number }).scaleFactor ?? 1;
-          const snapped = snapRect(r, area, Math.round(18 * scale), Math.round(8 * scale));
-          if (snapped) {
-            programmatic = performance.now() + 600;
-            await w.setPosition(new PhysicalPosition(snapped.x, snapped.y));
-            r = snapped;
-          }
+        // The bar docks itself (on or above the taskbar); everything else stays off the taskbar.
+        const docked = getSettings().layout.mode === "bar";
+        const area = docked ? areaOf(mon) : await safeAreaOf(mon);
+        const scale = mon.scaleFactor ?? 1;
+        const moved = (getSettings().window.snapEdges && snapRect(r, area, Math.round(18 * scale), Math.round(8 * scale))) || r;
+        const fixed = docked ? (moved !== r ? moved : null) : (clampInto(moved, area) ?? (moved !== r ? moved : null));
+        if (fixed) {
+          programmatic = performance.now() + 600;
+          await w.setPosition(new PhysicalPosition(fixed.x, fixed.y));
+          r = fixed;
         }
         if (getSettings().window.perMonitor) {
           const key = monitorKey(mon);
@@ -92,12 +95,13 @@ export function useWindowPlacement() {
           await store.set("main", { preferred: key, at: { ...places.at, [key]: toRelative(r, area) } });
         }
       };
-      offs.push(
-        w.onMoved(() => {
-          clearTimeout(timer);
-          timer = window.setTimeout(() => void settle(), 350);
-        }),
-      );
+      const later = () => {
+        clearTimeout(timer);
+        timer = window.setTimeout(() => void settle(), 350);
+      };
+      offs.push(w.onMoved(later), w.onResized(later));
+      // Start-up: a window saved over the taskbar (e.g. an auto-hidden one) moves off it.
+      window.setTimeout(() => void settle(), 1500);
       // Monitors coming and going: put the window back where the user last had it.
       const check = async () => {
         if (!alive || !getSettings().window.perMonitor) return;
@@ -112,7 +116,7 @@ export function useWindowPlacement() {
         const cur = (await currentMonitor()) as Mon | null;
         if (!target || !places || (cur && monitorKey(cur) === places.preferred)) return;
         const r = await rectNow();
-        const pos = fromRelative(places.at[places.preferred!] ?? { fx: 1, fy: 1 }, r.w, r.h, areaOf(target));
+        const pos = fromRelative(places.at[places.preferred!] ?? { fx: 1, fy: 1 }, r.w, r.h, await safeAreaOf(target));
         programmatic = performance.now() + 800;
         await w.setPosition(new PhysicalPosition(pos.x, pos.y));
       };

@@ -31,6 +31,8 @@ export interface SongPrefs {
   aiSync?: import("../ai/autosync").SavedSync;
   /** AI lyrics (Step 16) for a song no database has */
   aiLyrics?: import("../ai/aiLyrics").SavedAiLyrics;
+  /** don't write AI lyrics for this song (hover toolbar) */
+  aiLyricsOff?: boolean;
 }
 
 const NEGATIVE_TTL = 24 * 3600_000;
@@ -228,6 +230,31 @@ export function useSongOffset(np: OffsetNp | null): number {
     };
   }, [key]);
   return v.key === key && v.ms !== null ? v.ms : learned;
+}
+
+/** Turn AI lyrics writing off (or back on) for one song; its AI lyrics are kept, just not shown. */
+export async function setAiLyricsOff(np: Pick<NowPlaying, "title" | "artist">, off: boolean) {
+  const key = songKey(np);
+  await songs.set(key, { ...(await songs.get(key)), aiLyricsOff: off || undefined });
+  await changed(key);
+}
+
+/** Live: are AI lyrics turned off for this song? (null while loading) */
+export function useAiLyricsOff(np: Pick<NowPlaying, "title" | "artist"> | null): boolean | null {
+  const key = np ? songKey(np) : "";
+  const [v, setV] = useState<{ key: string; off: boolean } | null>(null);
+  useEffect(() => {
+    if (!key) return;
+    let alive = true;
+    const load = () => void songs.get(key).then((p) => alive && setV({ key, off: !!p?.aiLyricsOff }));
+    load();
+    const off = onSongPrefs((k) => k === key && load());
+    return () => {
+      alive = false;
+      off();
+    };
+  }, [key]);
+  return v?.key === key ? v.off : null;
 }
 
 /** React hook: lyrics for the current track (refetches on track change). */

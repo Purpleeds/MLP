@@ -4,7 +4,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
 use windows::Win32::Foundation::{HWND, RECT};
-use windows::Win32::UI::Shell::{SHAppBarMessage, ABE_BOTTOM, ABE_LEFT, ABE_RIGHT, ABE_TOP, ABM_GETTASKBARPOS, APPBARDATA};
+use windows::Win32::UI::Shell::{SHAppBarMessage, ABE_BOTTOM, ABE_LEFT, ABE_RIGHT, ABE_TOP, ABM_GETSTATE, ABM_GETTASKBARPOS, ABS_AUTOHIDE, APPBARDATA};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowExW, FindWindowW, GetWindow, GetWindowRect, IsIconic, IsWindowVisible, SetWindowPos, GW_HWNDPREV, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
@@ -51,6 +51,56 @@ fn taskbar() -> Option<(RECT, u32, Option<RECT>)> {
         })
     };
     Some((abd.rc, abd.uEdge, tray.filter(|r| r.right > r.left)))
+}
+
+/// A taskbar (physical px). `edge` is known for the main taskbar; other monitors' taskbars get it from
+/// their position on the monitor (done in TS, `core/safeArea.ts`).
+#[derive(serde::Serialize)]
+pub struct TaskbarRect {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    edge: Option<&'static str>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Taskbars {
+    auto_hide: bool,
+    bars: Vec<TaskbarRect>,
+}
+
+fn edge_name(edge: u32) -> &'static str {
+    match edge {
+        e if e == ABE_TOP => "top",
+        e if e == ABE_LEFT => "left",
+        e if e == ABE_RIGHT => "right",
+        _ => "bottom",
+    }
+}
+
+/// Every taskbar (main + other monitors'), so the window can keep off them. An auto-hidden taskbar
+/// isn't excluded from the monitor's work area, yet pops up over a window sitting at that edge.
+#[tauri::command]
+pub fn taskbars() -> Taskbars {
+    let mut abd = APPBARDATA { cbSize: std::mem::size_of::<APPBARDATA>() as u32, ..Default::default() };
+    let auto_hide = unsafe { SHAppBarMessage(ABM_GETSTATE, &mut abd) } as u32 & ABS_AUTOHIDE != 0;
+    let rect = |r: RECT, edge| TaskbarRect { x: r.left, y: r.top, w: r.right - r.left, h: r.bottom - r.top, edge };
+    let mut bars = Vec::new();
+    if let Some((rc, edge, _)) = taskbar() {
+        bars.push(rect(rc, Some(edge_name(edge))));
+    }
+    let mut prev: Option<HWND> = None;
+    for _ in 0..16 {
+        let Ok(h) = (unsafe { FindWindowExW(None, prev, w!("Shell_SecondaryTrayWnd"), None) }) else { break };
+        let mut r = RECT::default();
+        if unsafe { GetWindowRect(h, &mut r) }.is_ok() && r.right > r.left && r.bottom > r.top {
+            bars.push(rect(r, None));
+        }
+        prev = Some(h);
+    }
+    Taskbars { auto_hide, bars }
 }
 
 /// Keep the bar above the taskbar's own z-order while it sits on it (the taskbar is topmost too).

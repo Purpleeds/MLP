@@ -47,11 +47,11 @@ export const platform = {
     let y = pos.y;
     const mon = await currentMonitor();
     if (mon) {
-      const a = mon.workArea;
-      if (pos.x + size.width / 2 > a.position.x + a.size.width / 2) x = pos.x + size.width - nw;
-      if (pos.y + size.height / 2 > a.position.y + a.size.height / 2) y = pos.y + size.height - nh;
-      x = Math.max(a.position.x, Math.min(x, a.position.x + a.size.width - nw));
-      y = Math.max(a.position.y, Math.min(y, a.position.y + a.size.height - nh));
+      const a = await (await import("../safeArea")).safeAreaOf(mon);
+      if (pos.x + size.width / 2 > a.x + a.w / 2) x = pos.x + size.width - nw;
+      if (pos.y + size.height / 2 > a.y + a.h / 2) y = pos.y + size.height - nh;
+      x = Math.max(a.x, Math.min(x, a.x + a.w - nw));
+      y = Math.max(a.y, Math.min(y, a.y + a.h - nh));
     }
     await w.setSize(new PhysicalSize(nw, nh));
     await w.setPosition(new PhysicalPosition(x, y));
@@ -63,11 +63,11 @@ export const platform = {
     const w = await win();
     const mon = await currentMonitor();
     if (!mon) return;
-    const a = mon.workArea;
+    const a = await (await import("../safeArea")).safeAreaOf(mon);
     const size = await w.outerSize();
     const m = Math.round(16 * mon.scaleFactor);
-    const x = corner.endsWith("l") ? a.position.x + m : a.position.x + a.size.width - size.width - m;
-    const y = corner.startsWith("t") ? a.position.y + m : a.position.y + a.size.height - size.height - m;
+    const x = corner.endsWith("l") ? a.x + m : a.x + a.w - size.width - m;
+    const y = corner.startsWith("t") ? a.y + m : a.y + a.h - size.height - m;
     await w.setPosition(new PhysicalPosition(x, y));
   },
   async invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | undefined> {

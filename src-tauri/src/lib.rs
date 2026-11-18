@@ -252,6 +252,7 @@ pub fn run() {
             dock::dock_bar,
             dock::undock_bar,
             dock::window_covered,
+            dock::taskbars,
             obs::obs_set,
             obs::obs_update,
             share::save_image,

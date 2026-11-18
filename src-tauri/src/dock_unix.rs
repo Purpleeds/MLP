@@ -27,3 +27,16 @@ pub fn undock_bar() {}
 pub fn window_covered(_app: AppHandle) -> bool {
     false
 }
+
+/// No taskbar API here: the work area is used as is.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Taskbars {
+    auto_hide: bool,
+    bars: Vec<()>,
+}
+
+#[tauri::command]
+pub fn taskbars() -> Taskbars {
+    Taskbars { auto_hide: false, bars: Vec::new() }
+}

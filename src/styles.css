@@ -871,7 +871,7 @@ img.bg-art.spin {
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   max-width: calc(100% - 20px);
   padding: 3px;
   border-radius: 10px;
@@ -893,10 +893,13 @@ img.bg-art.spin {
   all: unset;
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 7px;
   cursor: pointer;
+}
+.toolbar-ai.off {
+  color: rgba(255, 255, 255, 0.5);
 }
 .toolbar button:hover {
   background: rgba(255, 255, 255, 0.14);
@@ -917,6 +920,25 @@ img.bg-art.spin {
   font: 600 11px/1 "Inter Variable", sans-serif;
   font-variant-numeric: tabular-nums;
   opacity: 0.8;
+}
+/* Other corners (chosen in toolbarSpot.ts so the toolbar doesn't cover the title or buttons). */
+.toolbar.at-br,
+.toolbar.at-bl {
+  top: auto;
+  bottom: 8px;
+  transform: translateY(4px);
+}
+.toolbar.at-tl,
+.toolbar.at-bl {
+  right: auto;
+  left: 10px;
+  justify-content: flex-start;
+}
+.card:hover .toolbar.at-br,
+.card:hover .toolbar.at-bl,
+.toolbar.at-br:focus-within,
+.toolbar.at-bl:focus-within {
+  transform: none;
 }
 .mode-title .toolbar {
   top: 50%;
@@ -944,6 +966,11 @@ img.bg-art.spin {
   text-align: center;
   pointer-events: none;
   animation: toast-in 0.2s ease;
+}
+/* Toolbar at the bottom: toasts go to the top so they don't cover its buttons. */
+.card:has(.toolbar.at-br, .toolbar.at-bl) .toast {
+  bottom: auto;
+  top: 14px;
 }
 @keyframes toast-in {
   from {

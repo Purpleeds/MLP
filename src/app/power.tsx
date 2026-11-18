@@ -6,10 +6,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri, platform } from "../core/platform";
 import { getSettings, updateSettings } from "../core/settings/store";
 import { DISPLAY_MODES, type Settings } from "../core/settings/schema";
-import { adjustSongOffset, useSongOffset } from "../core/lyrics/service";
+import { adjustSongOffset, setAiLyricsOff, useAiLyricsOff, useSongOffset } from "../core/lyrics/service";
+import { useAiLyricsStatus } from "../core/ai/aiLyrics";
 import { noteManualShow } from "./autoHide";
 import type { NowPlaying } from "../core/playback/clock";
 import { mediaControl } from "../core/playback/nowPlaying";
+import { measureSpot, type Spot } from "./toolbarSpot";
 
 const OFFSET_STEP = 100;
 
@@ -154,14 +156,36 @@ const ICON = {
   next: "M16 5h2v14h-2zM14.5 12 5 19V5z",
   play: "M7 4.5v15L19.5 12z",
   pause: "M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z",
+  ai: "M10 3l1.9 5.1L17 10l-5.1 1.9L10 17l-1.9-5.1L3 10l5.1-1.9zM18 13l.9 2.1L21 16l-2.1.9L18 19l-.9-2.1L15 16l2.1-.9z",
+  slash: "M3.4 2 22 20.6 20.6 22 2 3.4z",
   gear: "M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zM10.5 2h3l.5 2.6 1.9.8 2.2-1.5 2.1 2.1-1.5 2.2.8 1.9 2.5.4v3l-2.6.5-.8 1.9 1.5 2.2-2.1 2.1-2.2-1.5-1.9.8-.4 2.5h-3l-.5-2.6-1.9-.8-2.2 1.5-2.1-2.1 1.5-2.2-.8-1.9L2 13.5v-3l2.6-.5.8-1.9-1.5-2.2 2.1-2.1 2.2 1.5 1.9-.8z",
 };
 
 export function Toolbar({ np, actions, playback }: { np: NowPlaying | null; actions: ReturnType<typeof useActions>; playback: boolean }) {
   const offset = useSongOffset(np);
   const playing = np?.status === "playing";
+  // AI lyrics for this song: the button shows while they're being written (or were turned off here).
+  const aiOff = useAiLyricsOff(np);
+  const aiActive = !!useAiLyricsStatus().active;
+  const aiToggle = !!np && getSettings().ai.lyrics && (aiActive || aiOff === true);
+  // Pick a corner where the toolbar doesn't cover the title or buttons, each time the mouse comes in.
+  const bar = useRef<HTMLDivElement>(null);
+  const [spot, setSpot] = useState<Spot>("tr");
+  useEffect(() => {
+    const card = bar.current?.parentElement;
+    if (!card) return;
+    const place = () => {
+      if (bar.current && !card.classList.contains("mode-title")) setSpot(measureSpot(card, bar.current));
+    };
+    card.addEventListener("mouseenter", place);
+    card.addEventListener("focusin", place);
+    return () => {
+      card.removeEventListener("mouseenter", place);
+      card.removeEventListener("focusin", place);
+    };
+  }, []);
   return (
-    <div className="toolbar" data-no-drag role="toolbar" aria-label="Lyrics window tools">
+    <div ref={bar} className={`toolbar at-${spot}`} data-no-drag role="toolbar" aria-label="Lyrics window tools">
       {np && playback && (
         <span className="toolbar-playback">
           <button title="Previous track" aria-label="Previous track" onClick={() => void mediaControl({ action: "prev" })}>
@@ -193,6 +217,20 @@ export function Toolbar({ np, actions, playback }: { np: NowPlaying | null; acti
             <I d={ICON.search} />
           </button>
         </>
+      )}
+      {aiToggle && (
+        <button
+          className={aiOff ? "toolbar-ai off" : "toolbar-ai"}
+          title={aiOff ? "AI lyrics are off for this song — turn back on" : "Stop writing AI lyrics for this song"}
+          aria-label={aiOff ? "Turn AI lyrics back on for this song" : "Turn AI lyrics off for this song"}
+          aria-pressed={!!aiOff}
+          onClick={() => np && void setAiLyricsOff(np, !aiOff)}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+            <path d={ICON.ai} fill="currentColor" />
+            {aiOff && <path d={ICON.slash} fill="currentColor" />}
+          </svg>
+        </button>
       )}
       {np && (
         <button title="Share this line as an image" aria-label="Share this line" onClick={() => void actions.share()}>
