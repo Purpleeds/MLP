@@ -299,7 +299,7 @@ export function LyricView({ np, variant = "normal" }: { np: NowPlaying; variant?
     <section className={`lyrics-area ${variant}`}>
       {body}
       {ai && !adNow && (
-        <span className="ai-badge" title="Lyrics written by AI from the audio — may contain mistakes. Fix them in Settings → Sync lyrics.">
+        <span className="ai-badge" title="Lyrics written by AI from the audio — may contain mistakes. Fix them in Settings → This song.">
           AI
         </span>
       )}

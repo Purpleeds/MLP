@@ -50,6 +50,17 @@ export function SyncEditor() {
     list.current?.querySelector(".cur")?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [cursor]);
 
+  // Auto-sync's timing for this song, ready to review, use or publish (Step 15).
+  // (Hooks stay above the early return below: a song arriving later must not change the hook order.)
+  const [ai, setAi] = useState<{ key: string; lrc: string; lines: number; aligned: number } | null>(null);
+  const [showAiPublish, setShowAiPublish] = useState(false);
+  useEffect(() => {
+    if (!np) return;
+    setShowAiPublish(false);
+    void aiTimingLrc(np).then((r) => setAi(r ? { key, ...r } : null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
   if (!np) return <p className="help">Play the song you want to sync, then come back here.</p>;
   const m = displayMeta(np);
   const lrc = toLrc(lines, units, stamps, mode);
@@ -86,15 +97,6 @@ export function SyncEditor() {
     await mediaControl({ action: "seek", ms: 0 });
     await mediaControl({ action: "play" });
   };
-  // Auto-sync's timing for this song, ready to review, use or publish (Step 15).
-  const [ai, setAi] = useState<{ key: string; lrc: string; lines: number; aligned: number } | null>(null);
-  const [showAiPublish, setShowAiPublish] = useState(false);
-  useEffect(() => {
-    if (!np) return;
-    setShowAiPublish(false);
-    void aiTimingLrc(np).then((r) => setAi(r ? { key, ...r } : null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
   const shiftAll = (d: number) => setStamps((s) => s.map((st) => ({ start: Math.max(0, st.start + d), ...(st.end ? { end: st.end + d } : {}) })));
 
   return (
