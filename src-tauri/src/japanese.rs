@@ -37,6 +37,12 @@ pub fn dict_ready() -> bool {
     segmenter().is_some()
 }
 
+/// Does the dictionary in `dir` load? A half-unpacked or damaged copy still has metadata.json (so it
+/// counts as downloaded) but never loads, and would leave romaji off for good.
+pub fn dict_loads(dir: &std::path::Path) -> bool {
+    load_dictionary(&dir.to_string_lossy()).is_ok()
+}
+
 fn segmenter() -> Option<std::sync::Arc<Segmenter>> {
     let mut g = SEGMENTER.lock().unwrap();
     if g.is_none() {
@@ -168,6 +174,19 @@ mod tests {
         let yomi: String = w.iter().map(|x| x.yomi.as_str()).collect();
         assert_eq!(yomi, "キョウハイイテンキデス");
         assert!(w.iter().any(|x| x.display == "は" && x.pos == "助詞"));
+    }
+
+    #[test]
+    fn half_unpacked_dictionary_does_not_load() {
+        // metadata.json alone makes the copy look downloaded; it must still be caught as broken.
+        let dir = std::env::temp_dir().join(format!("mlp-ipadic-broken-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("metadata.json"), "{}").unwrap();
+        assert!(!dict_loads(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+        if dict() {
+            assert!(dict_loads(DICT_DIR.lock().unwrap().as_ref().unwrap()));
+        }
     }
 
     #[test]

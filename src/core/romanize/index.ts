@@ -189,21 +189,56 @@ export interface RomanLine {
 const capitalize = (s: string) => s.replace(/^\p{Ll}/u, (c) => c.toUpperCase());
 
 // ---------- Japanese dictionary on demand (Upgrade 17) ----------
-let dictAsked = false;
+/** Waits before trying again after the dictionary couldn't be set up (the last one repeats). */
+export const DICT_RETRY_MS = [15_000, 60_000, 300_000];
+let dictState: "idle" | "working" | "waiting" | "ready" = "idle";
+let dictFails = 0;
+let dictListening = false;
+/** A Japanese line with kanji went without readings since the dictionary was last set up. */
+let jaMissing = false;
 let dictVersion = 0;
 const dictListeners = new Set<() => void>();
-/** First Japanese song: download the dictionary (~11 MB) in the background; kana-only romaji until then. */
+
+function dictArrived() {
+  jaMissing = false;
+  cache.clear();
+  dictVersion++;
+  dictListeners.forEach((l) => l());
+}
+
+/**
+ * Kanji need the Japanese dictionary (~11 MB, fetched when the first Japanese song plays); until it works,
+ * lines with kanji stay as written. Rust uses the copy on disk, replaces one that doesn't load, or downloads
+ * it. A failure is retried after 15 s, 1 min, then every 5 min, so one network hiccup or a half-unpacked
+ * copy can't leave romaji off for good (it used to wait for the next song, and a broken copy counted as
+ * installed forever).
+ */
 function ensureJpDict() {
-  if (dictAsked) return;
-  dictAsked = true;
-  void platform.on("jp-dict-ready", () => {
-    cache.clear();
-    dictVersion++;
-    dictListeners.forEach((l) => l());
-  });
-  void platform.invoke<{ installed: boolean; downloading: boolean }>("jp_dict_status").then((st) => {
-    if (st && !st.installed && !st.downloading) void platform.invoke("ai_download", { id: "ipadic" }).catch(() => (dictAsked = false));
-  });
+  if (dictState !== "idle") return;
+  dictState = "working";
+  if (!dictListening) {
+    dictListening = true;
+    // Also fires when the dictionary is downloaded from Settings → AI models.
+    void platform.on("jp-dict-ready", () => {
+      dictState = "ready";
+      dictArrived();
+    });
+  }
+  void platform.invoke("jp_dict_ensure").then(
+    () => {
+      dictFails = 0;
+      dictState = "ready";
+      if (jaMissing) dictArrived();
+    },
+    (e) => {
+      platform.log(`japanese dictionary: ${e}`);
+      dictState = "waiting";
+      setTimeout(() => {
+        dictState = "idle";
+        ensureJpDict();
+      }, DICT_RETRY_MS[Math.min(dictFails++, DICT_RETRY_MS.length - 1)]);
+    },
+  );
 }
 /** Changes when the Japanese dictionary arrives (re-romanize). */
 export const jpDictVersion = () => dictVersion;
@@ -250,9 +285,12 @@ export async function romanizeLyrics(lyrics: Lyrics, o: RomanOptions): Promise<(
   // Japanese analysis in one batch through Rust.
   const jaIdx = scripts.map((s, i) => (s === "ja" && o.ja ? i : -1)).filter((i) => i >= 0);
   let jaWords: JaWord[][] = [];
-  if (jaIdx.length && isTauri()) ensureJpDict();
   if (jaIdx.length) {
     jaWords = (isTauri() ? await platform.invoke<JaWord[][]>("jp_readings", { lines: jaIdx.map((i) => texts[i]) }).catch(() => undefined) : undefined) ?? [];
+  }
+  if (isTauri() && jaIdx.some((i, k) => !jaWords[k]?.length && HAN.test(texts[i]))) {
+    jaMissing = true;
+    ensureJpDict();
   }
   // No analysis (dictionary still downloading, or mock mode): kana-only lines can still be romanized;
   // lines with kanji stay as written until the dictionary arrives (a half-converted mix of romaji and

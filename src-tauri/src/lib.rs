@@ -268,6 +268,7 @@ pub fn run() {
             update::update_check,
             update::update_install,
             ai::jp_dict_status,
+            ai::jp_dict_ensure,
             spotify::spotify_status,
             spotify::spotify_login,
             spotify::spotify_logout,

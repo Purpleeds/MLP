@@ -182,6 +182,31 @@ pub fn jp_dict_status(app: AppHandle) -> DictStatus {
     DictStatus { ready: installed && crate::japanese::dict_ready(), installed, downloading }
 }
 
+/// Make the Japanese dictionary usable for romaji: use the copy on disk, replace a copy that doesn't
+/// load, or download it. Ok once `jp_readings` can read kanji.
+#[tauri::command]
+pub async fn jp_dict_ensure(app: AppHandle) -> Result<(), String> {
+    if crate::japanese::dict_ready() {
+        return Ok(());
+    }
+    let a = asset("ipadic").ok_or("unknown download")?;
+    if let Some(dir) = ipadic_dir(&app) {
+        if crate::japanese::dict_loads(&dir) {
+            crate::japanese::set_dict_dir(Some(dir));
+            return Ok(());
+        }
+        eprintln!("[japanese] dictionary in {} doesn't load; downloading it again", dir.display());
+        crate::japanese::set_dict_dir(None);
+        let _ = std::fs::remove_dir_all(asset_path(&ai_dir(&app), a));
+    }
+    download(&app, "ipadic").await?;
+    if crate::japanese::dict_ready() {
+        Ok(())
+    } else {
+        Err("the Japanese dictionary was downloaded but doesn't load".into())
+    }
+}
+
 fn find_exe(dir: &Path, name: &str) -> Option<PathBuf> {
     let entries = std::fs::read_dir(dir).ok()?;
     for e in entries.flatten() {
