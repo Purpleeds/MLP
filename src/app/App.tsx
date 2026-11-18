@@ -19,6 +19,7 @@ import { DebugOverlay } from "./DebugOverlay";
 import { useAutoHide } from "./autoHide";
 import { adMarker, maybeAdLength } from "../core/playback/ads";
 import { Toolbar, useActions, useHotkeys, useToast } from "./power";
+import { onQuotaReached } from "../core/translationFiles";
 import "../styles.css";
 
 const GRIPS: [ResizeDirection, string][] = [
@@ -239,6 +240,8 @@ export default function App() {
   const toast = useToast();
   const actions = useActions(live, locked, toast.show, art);
   useHotkeys(s.hotkeys, actions, toast.show);
+  // Free translation limit used up: say so once (it stays quiet until translating works again).
+  useEffect(() => onQuotaReached(() => toast.show("Free translation limit reached for today — translations continue tomorrow.", 5000)), [toast.show]);
   // First start on this PC: integrated graphics only → light mode (once; the user can turn it off).
   useEffect(() => {
     if (s.app.lightChecked || !isTauri()) return;

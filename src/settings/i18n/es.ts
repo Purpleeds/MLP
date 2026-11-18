@@ -318,4 +318,8 @@ export const es: Record<string, string> = {
   "Read lyric lines to screen readers": "Leer las líneas a los lectores de pantalla",
   "Announces each new line (for blind and low-vision listeners).": "Anuncia cada línea nueva (para personas ciegas o con baja visión).",
   Accessibility: "Accesibilidad",
+  "Saved translations": "Traducciones guardadas",
+  "Each song's translation is saved as a text file, so it's only fetched once.": "La traducción de cada canción se guarda como archivo de texto, así solo se descarga una vez.",
+  "Translation files": "Archivos de traducción",
+  "Reset one song from the This song tab.": "Para restablecer una sola canción, usa la pestaña Esta canción.",
 };

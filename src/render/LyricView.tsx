@@ -9,7 +9,9 @@ import type { Settings } from "../core/settings/schema";
 import type { Timeline } from "../core/timing/timeline";
 import { jpDictVersion, onJpDict, romanizeLyrics, type RomanLine } from "../core/romanize";
 import { romanTimeline } from "../core/romanize/timeline";
-import { translateLyrics, type TranslateDeps } from "../core/translate";
+import type { TranslateDeps } from "../core/translate";
+import { getTranslations } from "../core/translationFiles";
+import { displayMeta } from "../core/display";
 import { isTauri, platform } from "../core/platform";
 
 /** fetch for translation services: plain fetch (CORS) for MyMemory, Tauri's HTTP client for DeepL (no CORS). */
@@ -207,20 +209,47 @@ function Timed({ lyrics, np, variant, mock, external }: { lyrics: Lyrics; np: No
   }, [lyrics, ro, dictV]);
   const romanLines = roman?.for === lyrics ? roman.lines : null;
   const tro = s.translation;
-  const troSig = JSON.stringify(tro);
+  const troSig = JSON.stringify({ ...tro, deeplKey: undefined }); // what the shown lines depend on
+  const keySig = `${troSig}|${tro.deeplKey}`;
+  const meta = displayMeta(np);
   const [trans, setTrans] = useState<{ for: Lyrics; sig: string; lines: (string | null)[] } | null>(null);
+  const [trRun, setTrRun] = useState(0); // bumped by resets and by coming back online
+  useEffect(() => {
+    const off = platform.on("translations-reset", () => setTrRun((n) => n + 1));
+    const online = () => setTrRun((n) => n + 1);
+    window.addEventListener("online", online);
+    return () => {
+      void off.then((f) => f());
+      window.removeEventListener("online", online);
+    };
+  }, []);
+  const lastTr = useRef<{ lyrics: Lyrics | null; sig: string }>({ lyrics: null, sig: "" });
   useEffect(() => {
     if (!tro.enabled || mock) return;
     let alive = true;
-    void translateLyrics(lyrics, tro, { fetchJson: translationFetch })
-      .then((lines) => alive && setTrans({ for: lyrics, sig: troSig, lines }))
-      .catch((e) => platform.log(`translation: ${e}`));
+    // Debounce typing in the DeepL key field and AI lyrics that grow line by line; songs start at once.
+    const prev = lastTr.current;
+    const wait = prev.lyrics === lyrics && prev.sig !== keySig ? 900 : lyrics.source === "ai" && prev.lyrics ? 1500 : 0;
+    lastTr.current = { lyrics, sig: keySig };
+    const t = setTimeout(() => {
+      void getTranslations(lyrics, meta, tro, { fetchJson: translationFetch })
+        .then((r) => alive && setTrans({ for: lyrics, sig: troSig, lines: r.lines }))
+        .catch((e) => platform.log(`translation: ${e}`));
+    }, wait);
     return () => {
       alive = false;
+      clearTimeout(t);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run when the song or translation settings change
-  }, [lyrics, troSig, mock]);
-  const transLines = tro.enabled && trans?.for === lyrics && trans.sig === troSig ? trans.lines : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run when the song, translation settings or a reset change
+  }, [lyrics, keySig, mock, trRun]);
+  const transLines = useMemo(() => {
+    if (!tro.enabled || !trans || trans.sig !== troSig) return null;
+    if (trans.for === lyrics) return trans.lines;
+    // AI lyrics growing: keep showing the lines already translated while the new ones are fetched.
+    if (lyrics.source !== "ai" || trans.for.source !== "ai" || trans.for.trackName !== lyrics.trackName) return null;
+    const byText = new Map(trans.for.lines.map((l, i) => [l.text, trans.lines[i]]));
+    return lyrics.lines.map((l) => byText.get(l.text) ?? null);
+  }, [tro.enabled, trans, troSig, lyrics]);
   const base = useMemo(
     () => romanTimeline(lyrics, romanLines, ro.mode, s.timing.wordMode, transLines),
     [lyrics, romanLines, ro.mode, s.timing.wordMode, transLines],

@@ -317,4 +317,8 @@ export const ja: Record<string, string> = {
   "Read lyric lines to screen readers": "歌詞の行をスクリーンリーダーで読み上げる",
   "Announces each new line (for blind and low-vision listeners).": "新しい行ごとに通知します（視覚に障がいのある方向け）。",
   Accessibility: "アクセシビリティ",
+  "Saved translations": "保存した翻訳",
+  "Each song's translation is saved as a text file, so it's only fetched once.": "曲ごとの翻訳はテキストファイルに保存されるので、取得は一度だけです。",
+  "Translation files": "翻訳ファイル",
+  "Reset one song from the This song tab.": "1曲だけリセットするには「この曲」タブから。",
 };

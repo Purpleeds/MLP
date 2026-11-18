@@ -20,6 +20,7 @@ import { ThemesPanel } from "./ThemesPanel";
 import { EvalPanel } from "./EvalPanel";
 import { UpdatesPanel } from "./UpdatesPanel";
 import { ObsPanel } from "./ObsPanel";
+import { TranslationPanel } from "./TranslationPanel";
 
 /** Write a setting; styling edits switch the preset label to "custom". */
 export function setField(path: string, value: unknown, style?: boolean) {
@@ -315,6 +316,8 @@ function Custom({ id }: { id: string }) {
       return <EvalPanel />;
     case "updates":
       return <UpdatesPanel />;
+    case "translations":
+      return <TranslationPanel />;
     case "obs":
       return <ObsPanel />;
     case "autostart":

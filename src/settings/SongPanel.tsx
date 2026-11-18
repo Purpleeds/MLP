@@ -4,6 +4,8 @@ import { useNowPlaying } from "../core/playback/nowPlaying";
 import { displayMeta, fmtTime } from "../core/display";
 import { pinLyrics, searchCandidates, setSongOffset, songKey, songs, useSongOffset } from "../core/lyrics/service";
 import type { LrclibRecord } from "../core/lyrics/model";
+import { resetTranslation } from "../core/translationFiles";
+import { useSettings } from "../core/settings/store";
 
 const syncKind = (r: LrclibRecord) =>
   r.instrumental ? "Instrumental" : r.hasWordSync || /<\d+:\d+/.test(r.syncedLyrics ?? "") ? "Word-synced" : r.syncedLyrics ? "Line-synced" : r.plainLyrics ? "Not synced" : "Empty";
@@ -16,6 +18,8 @@ export function SongPanel() {
   const [results, setResults] = useState<LrclibRecord[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [trMsg, setTrMsg] = useState("");
+  const translating = useSettings().translation.enabled;
   const key = np ? songKey(np) : "";
 
   useEffect(() => {
@@ -72,6 +76,23 @@ export function SongPanel() {
         )}
       </div>
       <p className="help">Plus shows lyrics earlier. Saved for this song only.</p>
+
+      {translating && (
+        <div className="inline">
+          <button
+            className="btn"
+            onClick={() =>
+              void resetTranslation(m).then(
+                () => (setTrMsg("Translating again…"), setTimeout(() => setTrMsg(""), 2500)),
+                (e) => setTrMsg(String(e)),
+              )
+            }
+          >
+            Reset translation
+          </button>
+          {trMsg && <span className="flash">{trMsg}</span>}
+        </div>
+      )}
 
       <form
         className="song-search"

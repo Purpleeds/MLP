@@ -1,6 +1,7 @@
 mod ai;
 mod obs;
 mod share;
+mod translations;
 mod update;
 #[cfg(windows)]
 mod dock;
@@ -252,6 +253,11 @@ pub fn run() {
             obs::obs_set,
             obs::obs_update,
             share::save_image,
+            translations::tr_read,
+            translations::tr_write,
+            translations::tr_delete,
+            translations::tr_clear,
+            translations::tr_open_folder,
             update::update_check,
             update::update_install,
             ai::jp_dict_status,
@@ -279,6 +285,7 @@ pub fn run() {
                 }
             }
             tray::create(&handle)?;
+            translations::drop_old_store(&handle);
             // Upgrade 17: Japanese dictionary from the download folder (if it's there yet).
             japanese::set_dict_dir(ai::ipadic_dir(&handle));
             media::start(handle.clone());

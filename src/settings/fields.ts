@@ -11,7 +11,7 @@ export type Field =
   | { kind: "list"; path: string; label: string; placeholder?: string; help?: string }
   | { kind: "font"; path: string; label: string; help?: string; style?: boolean }
   | { kind: "hotkey"; path: string; label: string; help?: string }
-  | { kind: "custom"; id: "presets" | "corners" | "lock" | "clear-cache" | "backup" | "song" | "autostart" | "sync" | "capture" | "vocals" | "autosync" | "spotify" | "ailyrics" | "learned" | "aimodels" | "themes" | "aieval" | "updates" | "obs"; label: string; help?: string };
+  | { kind: "custom"; id: "presets" | "corners" | "lock" | "clear-cache" | "backup" | "song" | "autostart" | "sync" | "capture" | "vocals" | "autosync" | "spotify" | "ailyrics" | "learned" | "aimodels" | "themes" | "aieval" | "updates" | "obs" | "translations"; label: string; help?: string };
 
 export interface Group {
   title: string;
@@ -458,6 +458,11 @@ export const SECTIONS: Section[] = [
           },
           { kind: "text", path: "translation.deeplKey", label: "DeepL API key", placeholder: "xxxxxxxx-xxxx-…:fx", help: "Free keys end with :fx. Stored on this PC only." },
         ],
+      },
+      {
+        title: "Saved translations",
+        note: "Each song's translation is saved as a text file, so it's only fetched once.",
+        fields: [{ kind: "custom", id: "translations", label: "Translation files", help: "Reset one song from the This song tab." }],
       },
     ],
   },
