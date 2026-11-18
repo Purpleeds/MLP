@@ -21,6 +21,7 @@ import { EvalPanel } from "./EvalPanel";
 import { UpdatesPanel } from "./UpdatesPanel";
 import { ObsPanel } from "./ObsPanel";
 import { TranslationPanel } from "./TranslationPanel";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 /** Write a setting; styling edits switch the preset label to "custom". */
 export function setField(path: string, value: unknown, style?: boolean) {
@@ -140,7 +141,7 @@ export function FieldRow({ f }: { f: Field }) {
       control = (
         <TextInput
           id={id}
-          value={(value as string[]).join(", ")}
+          value={Array.isArray(value) ? value.join(", ") : ""}
           placeholder={f.placeholder}
           onCommit={(v) => setField(f.path, v.split(",").map((x) => x.trim()).filter(Boolean))}
         />
@@ -153,7 +154,11 @@ export function FieldRow({ f }: { f: Field }) {
       control = <HotkeyInput id={id} value={String(value ?? "")} onChange={(v) => setField(f.path, v)} />;
       break;
     case "custom":
-      control = <Custom id={f.id} />;
+      control = (
+        <ErrorBoundary where={`settings/panel:${f.id}`} variant="panel">
+          <Custom id={f.id} />
+        </ErrorBoundary>
+      );
       break;
   }
 

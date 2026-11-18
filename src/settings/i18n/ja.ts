@@ -384,4 +384,13 @@ export const ja: Record<string, string> = {
   "Show advanced options": "詳細オプションを表示",
   "Changes apply right away.": "変更はすぐに反映されます。",
   "Reset section": "このセクションをリセット",
+  // Error notices (ErrorBoundary.tsx)
+  "This part of Settings hit a problem.": "設定のこの部分で問題が起きました。",
+  "This page of Settings hit a problem. The other sections still work.": "このページで問題が起きました。ほかのセクションは使えます。",
+  "Settings hit a problem.": "設定で問題が起きました。",
+  "Reload Settings": "設定を再読み込み",
+  "Try again": "もう一度試す",
+  "Copy details": "詳細をコピー",
+  "Copied": "コピーしました",
+  "Details": "詳細",
 };

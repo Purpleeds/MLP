@@ -385,4 +385,13 @@ export const es: Record<string, string> = {
   "Show advanced options": "Mostrar opciones avanzadas",
   "Changes apply right away.": "Los cambios se aplican al instante.",
   "Reset section": "Restablecer sección",
+  // Error notices (ErrorBoundary.tsx)
+  "This part of Settings hit a problem.": "Esta parte de Ajustes tuvo un problema.",
+  "This page of Settings hit a problem. The other sections still work.": "Esta página de Ajustes tuvo un problema. Las demás secciones siguen funcionando.",
+  "Settings hit a problem.": "Ajustes tuvo un problema.",
+  "Reload Settings": "Recargar Ajustes",
+  "Try again": "Reintentar",
+  "Copy details": "Copiar detalles",
+  "Copied": "Copiado",
+  "Details": "Detalles",
 };

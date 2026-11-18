@@ -1,5 +1,5 @@
 // Now-playing store: real GSMTC data from Rust in the app, a looping fake track in mock mode.
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { isTauri, platform } from "../platform";
 import { MOCK_TRACK, mockArtwork } from "../mock/fixtures";
 import { getSettings } from "../settings/store";
@@ -119,13 +119,14 @@ export function useNowPlaying(): NowPlaying | null {
   return useSyncExternalStore(subscribe, () => current);
 }
 
-/** Re-render at a fixed rate (for clock-driven UI such as the debug overlay). */
+/** Re-render at a fixed rate (for clock-driven UI such as the debug overlay).
+ *  Plain state + interval: a time-based useSyncExternalStore snapshot changes while a slow render
+ *  runs, React then forces another render, and after 50 in a row it unmounts the whole window. */
 export function useTicker(ms: number): number {
-  return useSyncExternalStore(
-    (l) => {
-      const t = setInterval(l, ms);
-      return () => clearInterval(t);
-    },
-    () => Math.floor(Date.now() / ms),
-  );
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), ms);
+    return () => clearInterval(t);
+  }, [ms]);
+  return tick;
 }

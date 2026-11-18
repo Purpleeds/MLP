@@ -2695,6 +2695,7 @@ dependencies = [
  "tauri-plugin-window-state",
  "tokio",
  "wasapi",
+ "webview2-com",
  "windows",
  "zip",
 ]

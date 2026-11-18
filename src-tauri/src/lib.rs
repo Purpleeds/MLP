@@ -29,6 +29,7 @@ mod media;
 #[path = "media_unix.rs"]
 mod media;
 mod tray;
+mod webview_guard;
 
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 
@@ -104,8 +105,9 @@ fn open_settings_now(app: &AppHandle, tab: Option<String>) {
         .min_inner_size(640.0, 460.0)
         .center()
         .build();
-    if let Err(e) = built {
-        eprintln!("[settings] failed to open: {e}");
+    match built {
+        Ok(w) => webview_guard::reload_on_renderer_crash(&w),
+        Err(e) => eprintln!("[settings] failed to open: {e}"),
     }
 }
 
@@ -293,6 +295,7 @@ pub fn run() {
                 if !has_saved_state {
                     place_near_clock(&w);
                 }
+                webview_guard::reload_on_renderer_crash(&w);
             }
             tray::create(&handle)?;
             translations::drop_old_store(&handle);

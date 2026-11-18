@@ -240,8 +240,14 @@ pub struct AiStatus {
     pub dir: String,
 }
 
-/// NVIDIA GPU name + memory (None without an NVIDIA driver).
+/// NVIDIA GPU name + memory (None without an NVIDIA driver). Asked once per run: the Settings
+/// panels poll `ai_status` every second or two, and starting nvidia-smi each time costs real CPU.
 pub fn gpu_name() -> Option<String> {
+    static GPU: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    GPU.get_or_init(query_gpu).clone()
+}
+
+fn query_gpu() -> Option<String> {
     let out = Command::new("nvidia-smi")
         .args(["--query-gpu=name,memory.total", "--format=csv,noheader"])
         .no_window()

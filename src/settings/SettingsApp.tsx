@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS } from "../core/settings/schema";
 import { findSection, getPath, SECTIONS, visibleGroups } from "./fields";
 import { FieldRow } from "./controls";
 import { platform } from "../core/platform";
+import { ErrorBoundary } from "./ErrorBoundary";
 import "./settings.css";
 
 const ADV_KEY = "mlp.settings.advanced";
@@ -25,6 +26,14 @@ const store = (k: string, v: string) => {
 };
 
 export default function SettingsApp() {
+  return (
+    <ErrorBoundary where="settings/window" variant="window">
+      <SettingsWindow />
+    </ErrorBoundary>
+  );
+}
+
+function SettingsWindow() {
   const [active, setActive] = useState(() => {
     const asked = new URLSearchParams(location.search).get("tab");
     return (findSection(asked) ?? findSection(stored("mlp.settings.tab")) ?? SECTIONS[0]).id;
@@ -77,22 +86,24 @@ export default function SettingsApp() {
             </button>
           )}
         </header>
-        {groups.map((g) => (
-          <section className="group" key={g.title}>
-            <h2>{t(g.title)}</h2>
-            {g.note && <p className="group-note">{t(g.note)}</p>}
-            <div className="group-body">
-              {g.fields.map((f) => (
-                <FieldRow key={f.kind === "custom" ? f.id : f.path} f={f} />
-              ))}
-            </div>
-          </section>
-        ))}
-        {hidden > 0 && (
-          <button className="btn quiet more" onClick={() => setAdvanced(true)}>
-            {t("Show advanced options")} ({hidden})
-          </button>
-        )}
+        <ErrorBoundary where={`settings/page:${section.id}`} variant="page" resetKey={`${section.id}|${advanced}`}>
+          {groups.map((g) => (
+            <section className="group" key={g.title}>
+              <h2>{t(g.title)}</h2>
+              {g.note && <p className="group-note">{t(g.note)}</p>}
+              <div className="group-body">
+                {g.fields.map((f) => (
+                  <FieldRow key={f.kind === "custom" ? f.id : f.path} f={f} />
+                ))}
+              </div>
+            </section>
+          ))}
+          {hidden > 0 && (
+            <button className="btn quiet more" onClick={() => setAdvanced(true)}>
+              {t("Show advanced options")} ({hidden})
+            </button>
+          )}
+        </ErrorBoundary>
       </main>
     </div>
   );
