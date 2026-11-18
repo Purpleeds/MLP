@@ -125,11 +125,15 @@ jobs:
           VERSION: ${{ steps.files.outputs.version }}
         run: |
           set -euo pipefail
-          # A slower, older run must not replace the installer of a newer commit.
-          head=$(gh api "repos/$GH_REPO/commits/main" --jq .sha)
-          if [ "$head" != "$GITHUB_SHA" ]; then
-            echo "main has moved on to $head; that run publishes the nightly"
-            exit 0
+          # A slower, older run must not replace the installer of a newer commit: skip only when the
+          # nightly already holds a commit that comes after this one.
+          current=$(gh api "repos/$GH_REPO/git/ref/tags/nightly" --jq .object.sha 2> /dev/null || true)
+          if [ -n "$current" ] && [ "$current" != "$GITHUB_SHA" ]; then
+            order=$(gh api "repos/$GH_REPO/compare/$GITHUB_SHA...$current" --jq .status 2> /dev/null || true)
+            if [ "$order" = "ahead" ]; then
+              echo "nightly already has the newer commit $current"
+              exit 0
+            fi
           fi
           mkdir -p out
           cp "$SETUP" out/MLP-nightly-setup.exe
