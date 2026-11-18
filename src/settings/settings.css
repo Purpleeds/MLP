@@ -16,6 +16,16 @@ body,
   margin: 0;
   height: 100%;
   background: var(--s-bg);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+/* Scroll boundary: lists stop at their ends (no elastic bounce, no scrolling the page behind). */
+.page,
+.nav,
+.results,
+.tap-list,
+.settings textarea {
+  overscroll-behavior: none;
 }
 .settings {
   display: grid;
@@ -31,6 +41,7 @@ body,
 .nav {
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
   gap: 1px;
   padding: 18px 10px;
   background: var(--s-panel);

@@ -396,6 +396,15 @@ export class LyricRenderer {
     const gap = o.lineGap * this.fontPx;
     const vh = (it: Item, i: number) => (it.kind === "dots" ? (i === active ? it.h : 0) : it.h);
     const vgap = (it: Item, i: number) => (it.kind === "dots" && i !== active ? 0 : gap);
+    // Scroll boundary: wheel browsing stops once the first line (scrolling up) or the last line
+    // (scrolling down) reaches the anchor, instead of scrolling on into empty space.
+    if (this.userOffset !== 0 && this.items.length) {
+      let above = 0;
+      for (let i = 0; i < focus; i++) above += vh(this.items[i], i) + vgap(this.items[i], i);
+      let below = 0;
+      for (let i = focus; i < this.items.length - 1; i++) below += vh(this.items[i], i) + vgap(this.items[i], i);
+      this.userOffset = clamp(this.userOffset, -above, below);
+    }
     const anchorY = this.height * o.anchor - this.userOffset;
     if (this.items.length) {
       let y = anchorY;
