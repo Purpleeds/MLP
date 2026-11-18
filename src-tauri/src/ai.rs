@@ -248,6 +248,11 @@ pub async fn jp_dict_ensure(app: AppHandle) -> Result<(), String> {
     }
 }
 
+/// A file shipped with an installed Whisper engine (GPU build first), e.g. "whisper-quantize.exe".
+pub fn whisper_tool(app: &AppHandle, name: &str) -> Option<PathBuf> {
+    ["whisper-cuda", "whisper-cpu"].iter().filter_map(|id| asset(id)).find_map(|a| find_exe(&asset_path(&locate(app, a)?, a), name))
+}
+
 fn find_exe(dir: &Path, name: &str) -> Option<PathBuf> {
     let entries = std::fs::read_dir(dir).ok()?;
     for e in entries.flatten() {
@@ -542,8 +547,15 @@ fn free_port() -> u16 {
 
 /// Start (or reuse) whisper-server with the given runtime + model. Returns the port.
 pub async fn ensure_server(app: &AppHandle, runtime: &str, model: &str) -> Result<u16, String> {
+    let md = asset(model).ok_or("unknown model")?;
+    let model_path = asset_path(&locate(app, md).ok_or("Whisper model isn't downloaded")?, md);
+    ensure_server_with(app, runtime, &model_path).await
+}
+
+/// Start (or reuse) whisper-server with the given runtime and model file (e.g. a tuned model).
+pub async fn ensure_server_with(app: &AppHandle, runtime: &str, model_path: &Path) -> Result<u16, String> {
     // Thread / priority changes restart the server with the new limits.
-    let id = format!("{runtime}/{model}/t{}/{}", crate::perf::threads(), crate::perf::low_priority());
+    let id = format!("{runtime}/{}/t{}/{}", model_path.display(), crate::perf::threads(), crate::perf::low_priority());
     if let Some((child, port, m)) = SERVER.lock().unwrap().as_mut() {
         if *m == id && child.try_wait().map(|s| s.is_none()).unwrap_or(false) {
             return Ok(*port);
@@ -551,10 +563,8 @@ pub async fn ensure_server(app: &AppHandle, runtime: &str, model: &str) -> Resul
     }
     stop_server();
     let rt = asset(runtime).ok_or("unknown runtime")?;
-    let md = asset(model).ok_or("unknown model")?;
     let rt_dir = locate(app, rt).ok_or("Whisper engine isn't downloaded")?;
     let exe = find_exe(&asset_path(&rt_dir, rt), "whisper-server.exe").ok_or("Whisper engine isn't downloaded")?;
-    let model_path = asset_path(&locate(app, md).ok_or("Whisper model isn't downloaded")?, md);
     let port = free_port();
     // Step 17 limits: CPU threads, below-normal priority; -sns drops "(music)"-style non-speech tokens.
     const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
@@ -637,6 +647,27 @@ pub struct TranscribeRequest {
     pub model: String,
     /// "auto" (NVIDIA GPU when available), "gpu" or "cpu"
     pub runtime: String,
+    /// model trained on this PC ("Train on my songs"); `model` stays the fallback
+    #[serde(default)]
+    pub tuned_model: Option<String>,
+}
+
+static TUNED_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The tuned model when there is one and it loads, else the catalog model. Returns (port, tuned).
+async fn serve(app: &AppHandle, runtime: &str, model: &str, tuned: Option<&str>) -> Result<(u16, bool), String> {
+    use std::sync::atomic::Ordering;
+    if let Some(p) = tuned.map(Path::new).filter(|p| p.is_file() && !TUNED_FAILED.load(Ordering::Relaxed)) {
+        match ensure_server_with(app, runtime, p).await {
+            Ok(port) => return Ok((port, true)),
+            Err(e) => {
+                // A broken tuned model never stops AI lyrics: back to the original.
+                eprintln!("[whisper] tuned model failed ({e}); using {model}");
+                TUNED_FAILED.store(true, Ordering::Relaxed);
+            }
+        }
+    }
+    Ok((ensure_server(app, runtime, model).await?, false))
 }
 
 /// Which Whisper engine to run: the GPU build when asked for / available and installed, else the CPU build.
@@ -674,14 +705,15 @@ pub async fn ai_transcribe(app: AppHandle, req: TranscribeRequest) -> Result<ser
     let pref = if GPU_FAILED.load(std::sync::atomic::Ordering::Relaxed) { "cpu" } else { req.runtime.as_str() };
     let mut runtime = pick_runtime(&app, pref)?;
     let t0 = Instant::now();
-    let port = match ensure_server(&app, runtime, &req.model).await {
+    let tuned = req.tuned_model.as_deref();
+    let (port, used_tuned) = match serve(&app, runtime, &req.model, tuned).await {
         Ok(p) => p,
         Err(e) if runtime == "whisper-cuda" && locate(&app, asset("whisper-cpu").unwrap()).is_some() => {
             // The CUDA build can fail on new GPUs / drivers: remember it and use the CPU build.
             eprintln!("[whisper] GPU engine failed ({e}); using the CPU engine");
             GPU_FAILED.store(true, std::sync::atomic::Ordering::Relaxed);
             runtime = "whisper-cpu";
-            ensure_server(&app, runtime, &req.model).await?
+            serve(&app, runtime, &req.model, tuned).await?
         }
         Err(e) => return Err(e),
     };
@@ -689,6 +721,7 @@ pub async fn ai_transcribe(app: AppHandle, req: TranscribeRequest) -> Result<ser
     json["runtime"] = runtime.into();
     json["source"] = source.into();
     json["tookMs"] = (t0.elapsed().as_millis() as u64).into();
+    json["tuned"] = used_tuned.into();
     Ok(json)
 }
 

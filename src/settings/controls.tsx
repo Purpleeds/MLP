@@ -14,6 +14,8 @@ import { VocalsPanel } from "./VocalsPanel";
 import { AutoSyncPanel } from "./AutoSyncPanel";
 import { SpotifyPanel } from "./SpotifyPanel";
 import { AiLyricsPanel } from "./AiLyricsPanel";
+import { TrainingPanel } from "./TrainingPanel";
+import { AiCorrectPanel } from "./AiCorrectPanel";
 import { LearnedPanel } from "./LearnedPanel";
 import { AiModelsPanel } from "./AiModelsPanel";
 import { ThemesPanel } from "./ThemesPanel";
@@ -162,7 +164,7 @@ export function FieldRow({ f }: { f: Field }) {
       break;
   }
 
-  const wide = f.kind === "custom" && (f.id === "presets" || f.id === "backup" || f.id === "song" || f.id === "sync" || f.id === "capture" || f.id === "vocals" || f.id === "autosync" || f.id === "spotify" || f.id === "ailyrics" || f.id === "aimodels" || f.id === "themes" || f.id === "aieval");
+  const wide = f.kind === "custom" && (f.id === "presets" || f.id === "backup" || f.id === "song" || f.id === "sync" || f.id === "capture" || f.id === "vocals" || f.id === "autosync" || f.id === "spotify" || f.id === "ailyrics" || f.id === "training" || f.id === "aicorrect" || f.id === "aimodels" || f.id === "themes" || f.id === "aieval");
   return (
     <div className={`row ${wide ? "wide" : ""}`}>
       <div className="row-label">
@@ -311,6 +313,10 @@ function Custom({ id }: { id: string }) {
       return <SpotifyPanel />;
     case "ailyrics":
       return <AiLyricsPanel />;
+    case "training":
+      return <TrainingPanel />;
+    case "aicorrect":
+      return <AiCorrectPanel />;
     case "learned":
       return <LearnedPanel />;
     case "aimodels":

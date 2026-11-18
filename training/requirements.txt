@@ -1,0 +1,8 @@
+# "Train on my songs" environment (PyTorch itself comes from the CUDA 12.8 index, see train.rs / README).
+transformers==5.23.0
+peft==0.21.3
+accelerate==1.16.0
+safetensors
+numpy
+huggingface_hub
+zhconv

@@ -33,3 +33,4 @@ src-tauri/redist/
 
 # Reference screenshots of other apps (kept locally, not published)
 docs/ref/
+__pycache__/

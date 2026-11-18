@@ -147,13 +147,17 @@ function splitWords(ws: WWord[]): WWord[][] {
 }
 
 /** Segments → lyric lines (a segment is usually a sung line; long ones are cut at a pause or comma). */
-export function segmentsToLines(segs: Seg[]): LyricLine[] {
-  const lines: LyricLine[] = [];
+export function segmentsToLines(segs: Seg[]): (LyricLine & { conf: number })[] {
+  const lines: (LyricLine & { conf: number })[] = [];
   for (const s of segs) {
-    const words = s.words.length ? s.words : [{ text: s.text, start: s.start, end: s.end, p: 1 }];
+    const segConf = Math.exp(Math.min(0, s.avgLogprob));
+    const words = s.words.length ? s.words : [{ text: s.text, start: s.start, end: s.end, p: segConf }];
     for (const part of splitWords(words)) {
       const text = joinWords(part);
-      if (letters(text)) lines.push({ start: part[0].start, end: Math.max(part[part.length - 1].end, part[0].start + 300), text, words: null });
+      // How sure Whisper was: mean word probability, weighted by word length.
+      const w = part.map((x) => Math.max(1, letters(x.text).length));
+      const conf = part.reduce((n, x, i) => n + x.p * w[i], 0) / w.reduce((a, b) => a + b, 0);
+      if (letters(text)) lines.push({ start: part[0].start, end: Math.max(part[part.length - 1].end, part[0].start + 300), text, words: null, conf: +conf.toFixed(3) });
     }
   }
   return lines;

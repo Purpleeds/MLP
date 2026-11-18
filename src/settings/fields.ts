@@ -21,7 +21,7 @@ export type Field = Common &
     | { kind: "list"; path: string; label: string; placeholder?: string; help?: string }
     | { kind: "font"; path: string; label: string; help?: string; style?: boolean }
     | { kind: "hotkey"; path: string; label: string; help?: string }
-    | { kind: "custom"; id: "presets" | "corners" | "lock" | "clear-cache" | "backup" | "song" | "autostart" | "sync" | "capture" | "vocals" | "autosync" | "spotify" | "ailyrics" | "learned" | "aimodels" | "themes" | "aieval" | "updates" | "obs" | "translations"; label: string; help?: string }
+    | { kind: "custom"; id: "presets" | "corners" | "lock" | "clear-cache" | "backup" | "song" | "autostart" | "sync" | "capture" | "vocals" | "autosync" | "spotify" | "ailyrics" | "learned" | "aimodels" | "themes" | "aieval" | "updates" | "obs" | "translations" | "training" | "aicorrect"; label: string; help?: string }
   );
 
 export interface Group extends Common {
@@ -616,7 +616,19 @@ export const SECTIONS: Section[] = [
               { value: "cpu", label: "CPU" },
             ],
           },
+          { kind: "toggle", path: "ai.improveEachPlay", label: "Improve them every time the song plays", help: "Each play is transcribed again: lines that agree are locked in, the rest is checked again next time." },
           { kind: "custom", id: "ailyrics", label: "Downloads & progress" },
+          { kind: "custom", id: "aicorrect", label: "Fix the words", help: "Hand-fixed lines are final and teach “Train on my songs”." },
+        ],
+      },
+      {
+        title: "Train on my songs",
+        note: "Tunes Whisper on the songs you play (NVIDIA GPU, up to 5 h per run) and tests it on songs it never trained on. The tuned model is used only if it writes better lyrics; the original stays as the fallback. Nothing is uploaded.",
+        fields: [
+          { kind: "toggle", path: "ai.saveTraining", label: "Save audio of songs with synced lyrics", help: "About 2 MB per minute of music." },
+          { kind: "text", path: "ai.trainingDir", label: "Training folder", placeholder: "Automatic: the roomiest drive that isn't the system drive", help: "Leave empty for automatic.", adv: true },
+          { kind: "slider", path: "ai.trainHours", label: "Longest training run", min: 0.5, max: 5, step: 0.5, unit: " h" },
+          { kind: "custom", id: "training", label: "Training" },
         ],
       },
       {

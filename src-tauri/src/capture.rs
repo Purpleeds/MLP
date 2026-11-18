@@ -472,7 +472,10 @@ fn capture_pid(pid: u32, source: &str) -> Result<(), String> {
             let dur_ms = audio.len() as f64 * 1000.0 / RATE as f64;
             let mut st = STATE.lock().unwrap();
             if st.as_ref().map(|s| s.key != key).unwrap_or(true) {
-                *st = Some(SongAudio::new(key));
+                // The previous song may be kept as a training clip ("Train on my songs").
+                if let Some(old) = st.replace(SongAudio::new(key)) {
+                    crate::train::on_song_replaced(&old.key, old.samples, old.covered);
+                }
             }
             st.as_mut().unwrap().write(pos - dur_ms - LATENCY_MS.load(Ordering::Relaxed) as f64, &audio);
         }
