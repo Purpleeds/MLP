@@ -3,6 +3,7 @@
 import type { Timeline, TimedLine, TimedWord } from "../core/timing/timeline";
 import { wordProgress } from "../core/timing/timeline";
 import { lineDir, wordDir } from "../core/bidi";
+import { planWordFx, type FxChoice, type FxStyle, type WordFx } from "./wordFx";
 
 export interface RendererOptions {
   anchor: number;
@@ -17,6 +18,10 @@ export interface RendererOptions {
   stagger: number;
   lift: number;
   emphasis: boolean;
+  /** which effect held / key words get ("auto" = matched to the song) */
+  effectStyle?: FxChoice;
+  /** song title: its words get an effect too */
+  songTitle?: string;
   glowColor: string;
   interludeDots: boolean;
   edgeFade: boolean;
@@ -36,7 +41,7 @@ interface WordEl {
   el: HTMLElement;
   w: TimedWord;
   letters: HTMLElement[] | null;
-  emph: boolean;
+  fx: WordFx | null;
   p: number;
   glow: number;
 }
@@ -67,8 +72,6 @@ interface Item {
   hlStr: string;
 }
 
-const LETTERS_MAX = 9;
-const EMPH_MIN_MS = 1000;
 const HL_FADE_MS = 650;
 const DOTS_IN_MS = 450;
 const DOTS_OUT_MS = 550;
@@ -142,7 +145,8 @@ export class LyricRenderer {
   }
 
   setOptions(o: RendererOptions) {
-    const relayout = o.lineGap !== this.opts.lineGap || o.emphasis !== this.opts.emphasis;
+    const relayout =
+      o.lineGap !== this.opts.lineGap || o.emphasis !== this.opts.emphasis || o.effectStyle !== this.opts.effectStyle || o.songTitle !== this.opts.songTitle;
     this.opts = o;
     this.root.dataset.align = o.align;
     this.root.classList.toggle("seekable", !!o.onLineClick);
@@ -180,11 +184,13 @@ export class LyricRenderer {
       this.items.push({ ...it, h: 0, y: 0, vy: 0, target: 0, shownTarget: 0, delayUntil: 0, scale: 1, hl: 0, live: false, cur: false, blur: -1, opacity: 1, tf: "", hlStr: "" });
     };
 
-    for (const line of tl.lines) {
+    const fx = this.opts.emphasis ? planWordFx(tl, { choice: this.opts.effectStyle ?? "auto", title: this.opts.songTitle }) : null;
+    this.energy = fx?.energy ?? 0.5;
+    tl.lines.forEach((line, i) => {
       const g = dotsAt.get(line.start);
       if (g) add(this.makeDots(g));
-      add(this.makeLine(line));
-    }
+      add(this.makeLine(line, fx?.words[i] ?? null));
+    });
     this.measure();
   }
 
@@ -201,7 +207,7 @@ export class LyricRenderer {
     return { kind: "dots" as const, start: g.start, end: g.end, bg: false, line: null, el, words: [], dots };
   }
 
-  private makeLine(line: TimedLine) {
+  private makeLine(line: TimedLine, fxRow: (WordFx | null)[] | null) {
     const el = document.createElement("div");
     el.className = `lr-item lr-line${line.bg ? " bg" : ""}${line.duet ? " duet" : ""}${line.voice !== undefined ? ` voice-${line.voice}` : ""}${line.fill === "none" ? " nofill" : ""}`;
     const main = document.createElement("p");
@@ -227,20 +233,16 @@ export class LyricRenderer {
       return ltrRun ?? main;
     };
     const words: WordEl[] = [];
-    for (const w of line.words) {
+    for (const [wi, w] of line.words.entries()) {
       const core = w.text.trimEnd();
       const tail = w.text.slice(core.length);
       const span = document.createElement("span");
       span.className = "lr-w";
       const letters = [...core];
-      // Held words glow. With estimated timing only visibly stretched words qualify ("noooo", "yeahhh").
-      const emph =
-        this.opts.emphasis &&
-        line.fill === "words" &&
-        w.end - w.start >= EMPH_MIN_MS &&
-        letters.length <= LETTERS_MAX &&
-        letters.length > 0 &&
-        (line.exact || /(\p{L})\1{2,}/u.test(core));
+      // Held words, the title and vivid keywords get an effect (see wordFx.ts).
+      const fx = fxRow?.[wi] ?? null;
+      const emph = !!fx;
+      if (fx) span.classList.add(`fx-${fx.style}`);
       let letterEls: HTMLElement[] | null = null;
       if (w.ruby) {
         // Furigana: <ruby>漢字<rt>かんじ</rt></ruby> segments inside the word span.
@@ -273,7 +275,7 @@ export class LyricRenderer {
       const parent = parentFor(core);
       parent.appendChild(span);
       if (tail) parent.appendChild(document.createTextNode(tail));
-      words.push({ el: span, w, letters: letterEls, emph, p: -1, glow: 0 });
+      words.push({ el: span, w, letters: letterEls, fx, p: -1, glow: 0 });
     }
     el.appendChild(main);
     if (line.sub) {
@@ -573,44 +575,125 @@ export class LyricRenderer {
       it.el.style.setProperty("--hl", hlStr);
     }
     if (!live) {
-      // Settle glow of emphasized words after the line ends.
-      for (const w of it.words) if (w.glow > 0) this.applyGlow(w, 0);
+      // Settle the effects of emphasized words after the line ends.
+      for (const w of it.words) if (w.glow > 0) this.clearFx(w);
       return animating;
     }
 
     const lift = this.opts.reducedMotion ? 0 : this.opts.lift;
     for (const w of it.words) {
       const p = line.fill === "none" ? 1 : wordProgress(w.w, t);
-      if (Math.abs(p - w.p) > 0.0005) {
+      const moved = Math.abs(p - w.p) > 0.0005;
+      if (moved) {
         w.p = p;
         w.el.style.setProperty("--p", p.toFixed(4));
-        if (lift) w.el.style.transform = `translateY(${(-lift * easeOut(p)).toFixed(4)}em)`;
-        if (w.letters) {
-          const n = w.letters.length;
-          w.letters.forEach((l, i) => {
-            const x = p * n - i;
-            l.style.setProperty("--p", clamp(x).toFixed(3));
-            if (!this.opts.reducedMotion) {
-              const bump = x > 0 && x < 2 ? Math.sin((Math.PI * x) / 2) : 0;
-              const settle = x >= 2 ? 1 : x > 0 ? Math.min(1, x / 2) : 0;
-              l.style.transform = `translateY(${(-0.07 * bump - 0.02 * settle).toFixed(4)}em) scale(${(1 + 0.08 * bump).toFixed(4)})`;
-            }
-          });
-        }
+        w.letters?.forEach((l, i) => l.style.setProperty("--p", clamp(p * w.letters!.length - i).toFixed(3)));
       }
-      if (w.emph) {
+      if (w.fx) {
+        // Effect strength: rises while sung, holds, fades out 700 ms after the word ends.
         const g = p <= 0 ? 0 : p < 1 ? Math.min(1, p * 1.8) : clamp(1 - (t - w.w.end) / 700);
-        if (Math.abs(g - w.glow) > 0.01) this.applyGlow(w, g);
-        if (g > 0 && g < 1) animating = true;
-      }
+        const still = this.opts.reducedMotion || (w.fx.style !== "shimmer" && w.fx.style !== "wave" && w.fx.style !== "shake" && w.fx.style !== "glitch");
+        if (moved || (!still && g > 0) || Math.abs(g - w.glow) > 0.01) this.drawFx(w, p, g, t, lift);
+        if (g > 0 && (g < 1 || !still)) animating = true;
+      } else if (moved && lift) w.el.style.transform = `translateY(${(-lift * easeOut(p)).toFixed(4)}em)`;
     }
     return animating;
   }
 
-  private applyGlow(w: WordEl, g: number) {
+  /** Draw one word's effect: g = effect strength now (0 … 1), p = fill progress. */
+  private drawFx(w: WordEl, p: number, g: number, t: number, lift: number) {
+    const fx = w.fx!;
     w.glow = g;
-    w.el.style.filter = g > 0.01 ? `drop-shadow(0 0 ${(g * this.fontPx * 0.24).toFixed(1)}px ${this.opts.glowColor})` : "";
+    const reduced = this.opts.reducedMotion;
+    // Reduced motion: no movement, only the glows.
+    const style: FxStyle = reduced && fx.style !== "bloom" ? "glow" : fx.style;
+    const k = fx.strength;
+    const px = this.fontPx;
+    const since = t - w.w.start;
+    const n = w.letters?.length ?? 1;
+    const q = Math.floor(t / 45); // jitter step (≈ 22 changes per second)
+    const burst = style === "glitch" && g > 0.3 && hash(Math.floor(t / 70)) < 0.2 + 0.2 * this.energy;
+    let wx = 0;
+    let wy = -lift * easeOut(p);
+    let wr = 0;
+    let ws = 1;
+    let wo = 1;
+    for (let i = 0; i < n; i++) {
+      const x = p * n - i;
+      let tx = 0;
+      let ty = 0;
+      let rot = 0;
+      let sc = 1;
+      let op = 1;
+      if (!reduced) {
+        if (w.letters && style !== "wave") {
+          // Letters bounce up as they are sung, then settle a little higher.
+          const bump = x > 0 && x < 2 ? Math.sin((Math.PI * x) / 2) : 0;
+          const settle = x >= 2 ? 1 : x > 0 ? Math.min(1, x / 2) : 0;
+          ty = -0.07 * bump - 0.02 * settle;
+          sc = 1 + 0.08 * bump;
+        }
+        if (style === "wave") ty = Math.sin((since / 1000) * 2 * Math.PI * 1.25 - i * 0.75) * 0.1 * g * k - 0.02 * g;
+        else if (style === "shimmer") {
+          // A bright band sweeps across the letters again and again; the rest dims a little.
+          const band = ((since / 750) % 1) * (n + 3) - 1.5;
+          const lit = Math.max(0, 1 - Math.abs(i - band) / 1.4);
+          op = 1 - 0.4 * g * (1 - lit);
+          ty -= 0.035 * lit * g;
+          sc += 0.05 * lit * g;
+        } else if (style === "shake") {
+          const a = 0.032 * g * k;
+          tx += a * (hash(q * 7 + i * 13) * 2 - 1);
+          ty += a * (hash(q * 11 + i * 17) * 2 - 1);
+          rot = 4 * g * k * (hash(q * 5 + i * 3) - 0.5);
+        } else if (burst && hash(q * 3 + i * 7) < 0.3) {
+          tx += (hash(q + i * 29) - 0.5) * 0.16 * k; // glitch: a letter or two jumps sideways
+          rot = 0;
+        }
+      }
+      if (w.letters) {
+        const l = w.letters[i];
+        l.style.transform = `translate(${tx.toFixed(4)}em,${ty.toFixed(4)}em) rotate(${rot.toFixed(2)}deg) scale(${sc.toFixed(4)})`;
+        l.style.opacity = op < 0.999 ? op.toFixed(3) : "";
+      } else {
+        wx += tx;
+        wy += ty;
+        wr = rot;
+        ws *= sc;
+        wo = op;
+      }
+    }
+    const glow = (r: number) => `drop-shadow(0 0 ${(g * r * k * px).toFixed(1)}px ${this.opts.glowColor})`;
+    let filter = "";
+    if (g > 0.01) {
+      if (style === "bloom") {
+        filter = `${glow(0.2)} ${glow(0.55)}`;
+        if (!reduced) ws *= 1 + 0.05 * g * k;
+      } else if (burst) {
+        const d = ((1.5 + 2.5 * hash(Math.floor(t / 70) + 9)) * k * g * px) / 28;
+        filter = `drop-shadow(${(-d).toFixed(1)}px 0 0 rgba(255,40,120,0.7)) drop-shadow(${d.toFixed(1)}px 0 0 rgba(40,220,255,0.7))`;
+      } else filter = glow(style === "glow" ? 0.24 : style === "glitch" ? 0.14 : style === "shake" ? 0.2 : 0.17);
+    }
+    w.el.style.filter = filter;
+    w.el.style.opacity = wo < 0.999 ? wo.toFixed(3) : "";
+    w.el.style.transform =
+      wx || wr || ws !== 1 ? `translate(${wx.toFixed(4)}em,${wy.toFixed(4)}em) rotate(${wr.toFixed(2)}deg) scale(${ws.toFixed(4)})` : wy ? `translateY(${wy.toFixed(4)}em)` : "";
   }
+
+  private clearFx(w: WordEl) {
+    w.glow = 0;
+    w.el.style.filter = "";
+    w.el.style.opacity = "";
+    w.letters?.forEach((l) => (l.style.opacity = ""));
+  }
+
+  private energy = 0.5;
 }
+
+/** Cheap deterministic noise in [0, 1). */
+const hash = (n: number) => {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
 
 const easeOut = (p: number) => 1 - (1 - p) * (1 - p);

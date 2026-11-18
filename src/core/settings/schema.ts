@@ -84,6 +84,8 @@ export interface Settings {
     lift: number;
     /** glow + letter wave on long held words */
     emphasis: boolean;
+    /** which effect: "auto" = matched to the song, or one style everywhere */
+    effectStyle: "auto" | "glow" | "bloom" | "shimmer" | "wave" | "shake" | "glitch";
     glowColor: string;
     interludeDots: boolean;
     /** fade lines near the top/bottom edges */
@@ -303,6 +305,7 @@ export const DEFAULT_SETTINGS: Settings = {
     fillSoftness: 0.9,
     lift: 0.05,
     emphasis: true,
+    effectStyle: "auto",
     glowColor: "rgba(255,255,255,0.55)",
     interludeDots: true,
     edgeFade: true,

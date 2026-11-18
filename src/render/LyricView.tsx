@@ -79,6 +79,7 @@ function rendererOptions(s: Settings): RendererOptions {
     stagger: l.stagger,
     lift: l.lift,
     emphasis: l.emphasis,
+    effectStyle: l.effectStyle,
     glowColor: l.glowColor,
     interludeDots: l.interludeDots,
     edgeFade: l.edgeFade,
@@ -90,7 +91,22 @@ function rendererOptions(s: Settings): RendererOptions {
 
 export type LyricVariant = "normal" | "mini" | "overlay" | "bar";
 
-function SyncedLyrics({ timeline, offsetMs, lang, variant, canSeek }: { timeline: Timeline; offsetMs: number; lang?: string; variant: LyricVariant; canSeek?: boolean }) {
+function SyncedLyrics({
+  timeline,
+  offsetMs,
+  lang,
+  variant,
+  canSeek,
+  title,
+}: {
+  timeline: Timeline;
+  offsetMs: number;
+  lang?: string;
+  variant: LyricVariant;
+  canSeek?: boolean;
+  /** song title: its words get word effects */
+  title?: string;
+}) {
   const s = useSettings();
   const host = useRef<HTMLDivElement>(null);
   const r = useRef<LyricRenderer | null>(null);
@@ -100,6 +116,7 @@ function SyncedLyrics({ timeline, offsetMs, lang, variant, canSeek }: { timeline
   const opts = useMemo(() => {
     const o: RendererOptions = {
       ...rendererOptions(s),
+      songTitle: title,
       fps: caps.lyrics ? Math.min(s.lyrics.fps, caps.lyrics) : s.lyrics.fps,
       // Upgrade 9: click a line to jump there (lyric time = position + offset).
       onLineClick: canSeek && s.lyrics.clickToSeek ? (start: number) => void mediaControl({ action: "seek", ms: Math.max(0, start - offset.current) }) : null,
@@ -111,7 +128,7 @@ function SyncedLyrics({ timeline, offsetMs, lang, variant, canSeek }: { timeline
     if (variant === "bar") return { ...o, anchor: 0, blur: false, edgeFade: false, inactiveScale: 1, stagger: 0, lineGap: 0, window: 0, fitWidth: true, interludeDots: false };
     if (variant === "overlay") return { ...o, anchor: 0.08, blur: false, edgeFade: false, inactiveScale: 0.92, stagger: 0, lineGap: 0.3, window: 1, align: "center" as const };
     return o;
-  }, [s, variant, canSeek, caps.lyrics]);
+  }, [s, variant, canSeek, caps.lyrics, title]);
 
   useEffect(() => {
     r.current = new LyricRenderer(host.current!, () => lyricTime(clock.position(), offset.current), opts);
@@ -275,7 +292,7 @@ function Timed({ lyrics, np, variant, mock, external }: { lyrics: Lyrics; np: No
   const timeline = useMemo(() => (sync ? applySync(base, lyrics, sync.lines, sync.fixes, sync.map) : base), [base, lyrics, sync]);
   const lang = useMemo(() => detectLang(lyrics.lines.map((l) => l.text).join("")), [lyrics]);
   // AI timing already includes what the per-song offset used to fix.
-  return <SyncedLyrics timeline={timeline} offsetMs={totalOffsetMs(s, np, sync ? 0 : songOffsetMs)} lang={lang} variant={variant} canSeek={np.canSeek} />;
+  return <SyncedLyrics timeline={timeline} offsetMs={totalOffsetMs(s, np, sync ? 0 : songOffsetMs)} lang={lang} variant={variant} canSeek={np.canSeek} title={meta.title} />;
 }
 
 /** How long the lyrics run (the record's duration, or the last line when that's later). */
