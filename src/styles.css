@@ -6,6 +6,7 @@ body,
   height: 100%;
   background: transparent;
   overflow: hidden;
+  overscroll-behavior: none;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -771,6 +772,7 @@ img.bg-art.spin {
   position: absolute;
   inset: 0;
   overflow-y: auto;
+  overscroll-behavior: none;
   padding: 8px var(--pad) 40px;
   white-space: pre-line;
   font-size: calc(var(--lr-size) * 0.62);
