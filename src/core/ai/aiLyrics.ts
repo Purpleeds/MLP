@@ -3,12 +3,12 @@
 // timed lines and keep them per song (songs.json `aiLyrics`). Auto-sync (Step 15) then adds word timing.
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { isTauri, platform } from "../platform";
-import { getSettings } from "../settings/store";
+import { getSettings, updateSettings } from "../settings/store";
 import { trackKey, type NowPlaying } from "../playback/clock";
 import type { LyricLine, Lyrics } from "../lyrics/model";
 import { songKey, songs } from "../lyrics/service";
 import { removeTiming, type SongId } from "./timingFiles";
-import { detectedLanguage, filterSegments, nextChunk, segmentsFrom, segmentsToLines, settle, type WhisperJson } from "./transcribe";
+import { detectedLanguage, filterSegments, missingWhisper, nextChunk, segmentsFrom, segmentsToLines, settle, sizeText, type AssetInfo, type WhisperJson } from "./transcribe";
 
 export interface SavedAiLyrics {
   v: 1;
@@ -28,6 +28,10 @@ export interface AiLyricsStatus {
   source?: "vocals" | "mix";
   tookMs?: number;
   lang?: string | null;
+  /** what's missing before MLP can write lyrics: listening is off, or Whisper isn't downloaded yet */
+  need?: "listen" | "download";
+  /** with need "download": what to download and how big it is */
+  download?: { ids: string[]; mb: number; busy: boolean };
 }
 
 interface Ctx {
@@ -79,12 +83,83 @@ interface Coverage {
   isolated?: [number, number][];
 }
 
+/** Last look at which Whisper files are missing (asking runs nvidia-smi, so not every tick). */
+let assets: { key: string; at: number; missing: AssetInfo[] } | null = null;
+let setupBusy = false;
+
+/** Whisper files the settings need that aren't downloaded yet ([] = ready; also [] when we can't tell). */
+async function missingNow(runtime: string, model: string): Promise<AssetInfo[]> {
+  const key = `${runtime}/${model}`;
+  // Complete stays complete; missing is looked at again every 5 s (Settings may be downloading).
+  if (assets?.key === key && (!assets.missing.length || Date.now() - assets.at < 5_000)) return assets.missing;
+  const st = await platform.invoke<{ gpu: string | null; assets: AssetInfo[] }>("ai_status").catch(() => undefined);
+  assets = { key, at: Date.now(), missing: st ? missingWhisper(st.assets, st.gpu, runtime, model) : [] };
+  return assets.missing;
+}
+
+const downloadInfo = (missing: AssetInfo[]) =>
+  missing.length ? { ids: missing.map((a) => a.id), mb: missing.reduce((n, a) => n + a.sizeMb, 0), busy: missing.some((a) => a.downloading) } : undefined;
+
+/**
+ * Lyric view button: turn on listening and download whatever Whisper still needs, so AI lyrics can
+ * start. Progress shows in the status; the engine picks up on its next tick.
+ */
+export async function setUpAiLyrics(): Promise<void> {
+  if (setupBusy) return;
+  if (!getSettings().ai.listen) await updateSettings("ai.listen", true);
+  const s = getSettings();
+  const st = await platform.invoke<{ gpu: string | null; assets: AssetInfo[] }>("ai_status").catch(() => undefined);
+  const missing = st ? missingWhisper(st.assets, st.gpu, s.ai.whisperRuntime, s.ai.whisperModel) : [];
+  if (!missing.length) {
+    setStatus({ phase: "listening", need: undefined, download: undefined, detail: "Listening…" });
+    return;
+  }
+  setupBusy = true;
+  const waiting = new Map<string, { ok: () => void; fail: (e: string) => void }>();
+  const off = await platform.on<{ id: string; received: number; total: number; done: boolean; error: string | null }>("ai-download", (p) => {
+    const a = missing.find((m) => m.id === p.id);
+    if (!a) return;
+    if (p.done) waiting.get(p.id)?.ok();
+    else if (p.error) waiting.get(p.id)?.fail(p.error);
+    else if (p.total) setStatus({ phase: "off", need: "download", detail: `Downloading ${a.name}… ${Math.round((p.received / p.total) * 100)} %` });
+  });
+  try {
+    for (const a of missing) {
+      setStatus({ phase: "off", need: "download", detail: `Downloading ${a.name}…` });
+      const finished = new Promise<void>((ok, fail) => waiting.set(a.id, { ok, fail }));
+      finished.catch(() => undefined); // only awaited when Settings already started it
+      // Already downloading (started in Settings): wait for that download to finish.
+      await platform.invoke("ai_download", { id: a.id }).catch((e) => {
+        if (String(e).includes("already downloading")) return finished;
+        throw e;
+      });
+    }
+    assets = null;
+    setStatus({ phase: "listening", need: undefined, download: undefined, detail: "Listening…" });
+  } catch (e) {
+    assets = null;
+    setStatus({ phase: "error", need: "download", detail: `Download failed: ${e}` });
+  } finally {
+    setupBusy = false;
+    off();
+  }
+}
+
 async function tick() {
   if (busy || !ctx || !data) return;
   const s = getSettings();
-  if (!s.ai.lyrics) return setStatus({ phase: "off", detail: "AI lyrics are off." });
-  if (!s.ai.listen) return setStatus({ phase: "off", detail: "Turn on “Listen to the player” to write lyrics with AI." });
-  if (data.complete) return setStatus({ phase: "done", detail: "Finished this song." });
+  if (!s.ai.lyrics) return setStatus({ phase: "off", need: undefined, detail: "AI lyrics are off." });
+  if (data.complete) return setStatus({ phase: "done", need: undefined, download: undefined, detail: "Finished this song." });
+  if (setupBusy || (status.phase === "error" && status.need)) return; // a failed download stays on screen until "Try again"
+  const missing = await missingNow(s.ai.whisperRuntime, s.ai.whisperModel);
+  if (!ctx || !data) return;
+  if (!s.ai.listen) return setStatus({ phase: "off", need: "listen", download: downloadInfo(missing), detail: "Turn on “Listen to the player” to write lyrics with AI." });
+  if (missing.length) {
+    const dl = downloadInfo(missing)!;
+    const detail = dl.busy ? "Downloading Whisper…" : `Whisper isn't downloaded yet (${sizeText(dl.mb)}, once).`;
+    return setStatus({ phase: "off", need: "download", download: dl, detail });
+  }
+  if (status.need) setStatus({ need: undefined, download: undefined });
   if (Date.now() < backoffUntil) return;
   if (s.ai.pauseFullscreen && (await platform.invoke<boolean>("ai_busy").catch(() => false))) return setStatus({ phase: "paused", detail: "Paused while a full-screen app runs." });
 
@@ -156,7 +231,15 @@ async function start(np: NowPlaying) {
   const saved = (await songs.get(song))?.aiLyrics;
   if (my !== gen) return;
   data = saved?.v === 1 ? saved : { v: 1, lines: [], doneTo: 0, lang: null, complete: false, model: getSettings().ai.whisperModel };
-  setStatus({ phase: "listening", detail: "Listening…", lines: data.lines.length, lang: data.lang });
+  const listen = getSettings().ai.listen;
+  setStatus({
+    phase: listen ? "listening" : "off",
+    need: listen ? undefined : "listen",
+    download: undefined,
+    detail: listen ? "Listening…" : "Turn on “Listen to the player” to write lyrics with AI.",
+    lines: data.lines.length,
+    lang: data.lang,
+  });
   notify();
   clearInterval(timer);
   timer = window.setInterval(() => void tick(), TICK_MS);
@@ -175,7 +258,7 @@ function stop() {
   data = null;
   clearInterval(timer);
   timer = 0;
-  setStatus({ phase: "off", detail: "", lines: 0 });
+  setStatus({ phase: "off", detail: "", lines: 0, need: undefined, download: undefined });
 }
 
 let bridged = false;

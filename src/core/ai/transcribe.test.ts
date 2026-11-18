@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectedLanguage, filterSegments, isLoop, nextChunk, segmentsFrom, segmentsToLines, settle, type Seg } from "./transcribe";
+import { detectedLanguage, filterSegments, isLoop, missingWhisper, nextChunk, segmentsFrom, segmentsToLines, settle, type AssetInfo, type Seg } from "./transcribe";
 
 const seg = (start: number, end: number, text: string, extra: Partial<Seg> = {}): Seg => ({ start, end, text, words: [], avgLogprob: -0.2, noSpeech: 0.01, ...extra });
 
@@ -20,6 +20,8 @@ describe("AI lyrics", () => {
       seg(0, 3000, "Thank you for watching!"),
       seg(3000, 6000, "♪ ♪"),
       seg(6000, 8000, "[Music]"),
+      seg(6000, 8000, "【音楽】"),
+      seg(6000, 8000, "（拍手）"),
       seg(8000, 11000, "I can see the city lights"),
       seg(11000, 14000, "ご視聴ありがとうございました"),
       seg(14000, 17000, "la la la la la la la la la la"),
@@ -60,5 +62,23 @@ describe("AI lyrics", () => {
     expect(r.kept.map((s) => s.text)).toEqual(["a", "b"]);
     expect(r.doneTo).toBe(12_000);
     expect(settle([], { from: 0, to: 28_000, final: false }).doneTo).toBe(25_000); // instrumental: move on
+  });
+});
+
+describe("missingWhisper", () => {
+  const asset = (id: string, installed: boolean, sizeMb = 100): AssetInfo => ({ id, name: id, installed, downloading: false, sizeMb });
+  const ids = (a: AssetInfo[]) => a.map((x) => x.id);
+
+  it("asks for the GPU engine and the model on a fresh PC with an NVIDIA GPU", () => {
+    const assets = [asset("whisper-cuda", false), asset("whisper-cpu", false), asset("large-v3-turbo-q5_0", false)];
+    expect(ids(missingWhisper(assets, "RTX", "auto", "large-v3-turbo-q5_0"))).toEqual(["whisper-cuda", "large-v3-turbo-q5_0"]);
+    expect(ids(missingWhisper(assets, null, "auto", "large-v3-turbo-q5_0"))).toEqual(["whisper-cpu", "large-v3-turbo-q5_0"]);
+    expect(ids(missingWhisper(assets, "RTX", "cpu", "large-v3-turbo-q5_0"))).toEqual(["whisper-cpu", "large-v3-turbo-q5_0"]);
+  });
+
+  it("any installed engine will do; nothing missing once the model is there", () => {
+    const assets = [asset("whisper-cuda", false), asset("whisper-cpu", true), asset("base", true), asset("large-v3-turbo-q5_0", false)];
+    expect(ids(missingWhisper(assets, "RTX", "auto", "base"))).toEqual([]);
+    expect(ids(missingWhisper(assets, "RTX", "auto", "large-v3-turbo-q5_0"))).toEqual(["large-v3-turbo-q5_0"]);
   });
 });

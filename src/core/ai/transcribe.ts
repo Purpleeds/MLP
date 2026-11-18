@@ -75,8 +75,8 @@ const JUNK = new RegExp(
   ].join("|"),
   "iu",
 );
-/** Only sound tags or symbols: ♪, (music), [Music], *applause*, … */
-const ONLY_TAGS = /^[\s♪♫🎵🎶*#~.,!?\-–—]*([([*][^)\]*]*[)\]*][\s♪♫🎵🎶.,!?]*)*$/u;
+/** Only sound tags or symbols: ♪, (music), [Music], *applause*, 【音楽】, （拍手）, … */
+const ONLY_TAGS = /^[\s♪♫🎵🎶*#~.,!?\-–—]*([([*【（［〔][^)\]*】）］〕]*[)\]*】）］〕][\s♪♫🎵🎶.,!?]*)*$/u;
 
 const letters = (s: string) => s.replace(/[^\p{L}\p{N}]/gu, "");
 
@@ -190,3 +190,24 @@ export function settle(segs: Seg[], chunk: { from: number; to: number; final: bo
   const doneTo = Math.max(chunk.from + 5_000, last ? last.end : chunk.to - 3_000);
   return { kept, doneTo: Math.min(doneTo, chunk.to) };
 }
+
+// ---------- setup ----------
+export interface AssetInfo {
+  id: string;
+  name: string;
+  installed: boolean;
+  downloading: boolean;
+  sizeMb: number;
+}
+
+/** Whisper engine + model the settings ask for that aren't on this PC yet (any installed engine will do). */
+export function missingWhisper(assets: AssetInfo[], gpu: string | null, runtime: string, model: string): AssetInfo[] {
+  const find = (id: string) => assets.find((a) => a.id === id);
+  const engines = [find("whisper-cuda"), find("whisper-cpu")];
+  const wantGpu = runtime === "gpu" || (runtime === "auto" && !!gpu);
+  const engine = engines.some((a) => a?.installed) ? undefined : find(wantGpu ? "whisper-cuda" : "whisper-cpu");
+  return [engine, find(model)].filter((a): a is AssetInfo => !!a && !a.installed);
+}
+
+/** Download size for people: "148 MB", "1.3 GB". */
+export const sizeText = (mb: number) => (mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${Math.round(mb)} MB`);

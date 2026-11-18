@@ -718,6 +718,31 @@ img.bg-art.spin {
   font-size: 14px;
   opacity: 0.6;
 }
+.lr-message-action {
+  margin-top: 6px;
+}
+/* AI lyrics: turn on listening / download Whisper from the lyric view. */
+.lr-ai-btn {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.lr-ai-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+.lr-ai-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+}
+.mode-bar .lr-message-action,
+.mode-overlay .lr-message-action {
+  display: none;
+}
 .lr-loading {
   position: absolute;
   inset: 0;

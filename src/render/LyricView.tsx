@@ -35,6 +35,7 @@ import { fpsCaps, usePower } from "../core/power";
 import { lineAt } from "../core/timing/timeline";
 import { applySync, plainToLines } from "../core/ai/autosync";
 import { useAiLyrics } from "../core/ai/aiLyrics";
+import { AiLyricsMessage } from "./AiLyricsMessage";
 import { MOCK_TRACK } from "../core/mock/fixtures";
 import { LyricRenderer, type RendererOptions } from "./LyricRenderer";
 
@@ -292,8 +293,7 @@ export function LyricView({ np, variant = "normal" }: { np: NowPlaying; variant?
     );
   else if (np.sourceKind === "mock") body = <Timed lyrics={MOCK_LYRICS} np={np} variant={variant} mock />;
   else if (ai) body = <Timed lyrics={ai} np={np} variant={variant} />;
-  else if (aiWanted && s.ai.listen)
-    body = <Message title="No lyrics for this song" detail="Listening — MLP is writing the lyrics with AI. Lines appear about half a minute after they're sung." />;
+  else if (aiWanted) body = <AiLyricsMessage title="No lyrics for this song" />;
   else body = <Message title="No lyrics for this song" detail={`LRCLIB has no match for “${np.title}”.`} />;
   return (
     <section className={`lyrics-area ${variant}`}>

@@ -287,7 +287,20 @@ pub async fn download(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
             return Err("already downloading".into());
         }
     }
-    let result = download_inner(app, a).await;
+    // Network hiccups (no connection yet after waking up, a dropped connection, a busy server) are
+    // retried a few times; an interrupted file resumes from where it stopped.
+    let mut result = download_inner(app, a).await;
+    for wait in [3, 10, 30] {
+        match &result {
+            Err(e) if e.retry => {
+                eprintln!("[download] {}: {} — retrying in {wait} s", a.id, e.msg);
+                tokio::time::sleep(Duration::from_secs(wait)).await;
+                result = download_inner(app, a).await;
+            }
+            _ => break,
+        }
+    }
+    let result = result.map_err(|e| format!("{}: {}", a.name, e.msg));
     DOWNLOADING.lock().unwrap().as_mut().map(|s| s.remove(id));
     if id == "ipadic" && result.is_ok() {
         crate::japanese::set_dict_dir(ipadic_dir(app));
@@ -300,7 +313,51 @@ pub async fn download(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
     result
 }
 
-async fn download_inner(app: &AppHandle, a: &Asset) -> Result<PathBuf, String> {
+/// GET `url` (from byte `have` on, to resume). Errors say what went wrong; server trouble is retryable.
+async fn start_download(url: &str, have: u64) -> Result<reqwest::Response, DlError> {
+    let client = reqwest::Client::builder()
+        .user_agent(concat!("MLP/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(Duration::from_secs(20))
+        .read_timeout(Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut req = client.get(url);
+    if have > 0 {
+        req = req.header("Range", format!("bytes={have}-"));
+    }
+    let res = req.send().await.map_err(|e| net_error(&e, url))?;
+    let code = res.status();
+    if code.is_success() || code.as_u16() == 416 {
+        return Ok(res);
+    }
+    Err(DlError { msg: format!("the server answered HTTP {code}"), retry: code.is_server_error() || code.as_u16() == 429 })
+}
+
+/// Why a download failed, and whether trying again may help.
+struct DlError {
+    msg: String,
+    retry: bool,
+}
+
+impl From<String> for DlError {
+    fn from(msg: String) -> Self {
+        DlError { msg, retry: false }
+    }
+}
+
+/// A network error people can act on: which server, and the real cause (reqwest's own message is
+/// only "error sending request for url (…)" and hides it).
+fn net_error(e: &reqwest::Error, url: &str) -> DlError {
+    let host = url.split('/').nth(2).unwrap_or("the download server");
+    let mut cause: &dyn std::error::Error = e;
+    while let Some(inner) = cause.source() {
+        cause = inner;
+    }
+    let what = if e.is_timeout() { "timed out" } else { "no connection" };
+    DlError { msg: format!("couldn't reach {host}: {what} ({cause}). Check your internet connection and try again."), retry: true }
+}
+
+async fn download_inner(app: &AppHandle, a: &Asset) -> Result<PathBuf, DlError> {
     let dir = ai_dir(app);
     let target = asset_path(&dir, a);
     if installed(&dir, a) {
@@ -310,19 +367,11 @@ async fn download_inner(app: &AppHandle, a: &Asset) -> Result<PathBuf, String> {
     let part = dir.join("downloads").join(format!("{}.part", a.id));
     let have = part.metadata().map(|m| m.len()).unwrap_or(0);
 
-    let client = reqwest::Client::builder().user_agent(concat!("MLP/", env!("CARGO_PKG_VERSION"))).build().map_err(|e| e.to_string())?;
-    let mut req = client.get(a.url);
-    if have > 0 {
-        req = req.header("Range", format!("bytes={have}-"));
-    }
-    let res = req.send().await.map_err(|e| format!("download failed: {e}"))?;
+    let res = start_download(a.url, have).await?;
     if res.status().as_u16() == 416 {
         // The leftover partial file is already complete or longer than the file: start over.
         let _ = std::fs::remove_file(&part);
-        return Err("download failed: the partial file didn't match; try again".into());
-    }
-    if !res.status().is_success() {
-        return Err(format!("download failed: HTTP {}", res.status()));
+        return Err(DlError { msg: "the partly downloaded file didn't match; starting over".into(), retry: true });
     }
     let resumed = res.status().as_u16() == 206;
     let total = res.content_length().unwrap_or(0) + if resumed { have } else { 0 };
@@ -337,7 +386,7 @@ async fn download_inner(app: &AppHandle, a: &Asset) -> Result<PathBuf, String> {
     let mut last = Instant::now();
     let mut stream = res.bytes_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("download interrupted: {e}"))?;
+        let chunk = chunk.map_err(|e| net_error(&e, a.url))?;
         file.write_all(&chunk).map_err(|e| e.to_string())?;
         received += chunk.len() as u64;
         if last.elapsed() > Duration::from_millis(250) {
@@ -354,7 +403,7 @@ async fn download_inner(app: &AppHandle, a: &Asset) -> Result<PathBuf, String> {
         .map_err(|e| e.to_string())??;
     if !ok {
         let _ = std::fs::remove_file(&part);
-        return Err("the download was damaged (checksum mismatch); try again".into());
+        return Err(DlError { msg: "the download was damaged (checksum mismatch)".into(), retry: true });
     }
 
     if a.kind == "runtime" {
@@ -654,6 +703,25 @@ mod tests {
             assert!(a.sha256.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()), "{}", a.id);
             assert!(!a.url.contains("/resolve/main/"), "{} should be pinned to a revision", a.id);
         }
+    }
+
+    #[test]
+    fn unreachable_server_says_why_and_retries() {
+        let e = tauri::async_runtime::block_on(start_download("https://mlp-test.invalid/file.zip", 0)).unwrap_err();
+        eprintln!("{}", e.msg);
+        assert!(e.retry);
+        assert!(e.msg.starts_with("couldn't reach mlp-test.invalid: "), "{}", e.msg);
+        assert!(!e.msg.contains("error sending request"), "{}", e.msg);
+    }
+
+    /// Network: the Japanese dictionary's release asset answers (GitHub redirects to its asset host).
+    #[test]
+    #[ignore]
+    fn ipadic_url_answers() {
+        let a = asset("ipadic").unwrap();
+        let res = tauri::async_runtime::block_on(start_download(a.url, 0)).map_err(|e| e.msg).unwrap();
+        assert_eq!(res.status().as_u16(), 200);
+        assert_eq!(res.content_length(), Some(10_519_550));
     }
 
     #[test]

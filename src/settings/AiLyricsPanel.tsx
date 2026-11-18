@@ -82,7 +82,13 @@ export function AiLyricsPanel() {
         <>
           <div className="capture-row">
             <span className="capture-label">Status</span>
-            <span>{!s.ai.lyrics ? "Off" : st?.detail || "Ready — starts when a song without lyrics plays."}</span>
+            <span>
+              {!s.ai.lyrics
+                ? "Off"
+                : !s.ai.listen
+                  ? "Turn on “Listen to the player” above — AI lyrics need it."
+                  : st?.detail || "Ready — starts when a song without lyrics plays."}
+            </span>
           </div>
           {!!st?.lines && (
             <div className="capture-row">
