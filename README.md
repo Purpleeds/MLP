@@ -32,6 +32,8 @@ A small always-on-top window that shows time-synced lyrics for whatever Spotify 
 
 Download `MLP_x.y.z_x64-setup.exe` from [Releases](https://github.com/Purpleeds/MLP/releases/latest) and run it (no admin needed). Windows 11 includes the WebView2 runtime the app uses. The installer isn't code-signed yet, so SmartScreen may warn: *More info → Run anyway*. From 0.2.0 on, MLP checks for updates once a day and installs them from Settings → General → Updates.
 
+Newest build of `main` (made by GitHub Actions on every push, may be unfinished): [MLP-nightly-setup.exe](https://github.com/Purpleeds/MLP/releases/download/nightly/MLP-nightly-setup.exe). Pushing a tag `v<version>` publishes a normal release with `MLP-setup.exe`, so [releases/latest/download/MLP-setup.exe](https://github.com/Purpleeds/MLP/releases/latest/download/MLP-setup.exe) always points at the newest version (needs the updater key as the `TAURI_SIGNING_PRIVATE_KEY` repository secret; see `.github/workflows/build.yml`).
+
 Windows hides new tray icons under the **^** arrow near the clock — drag the MLP icon onto the taskbar to keep it visible.
 
 ## Use
