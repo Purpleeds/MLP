@@ -223,6 +223,8 @@ export interface Settings {
     baseUrl: string;
     /** also try the community word-synced database (AMLL TTML DB) when LRCLIB has no word timing */
     amll: boolean;
+    /** nothing on LRCLIB: use VocaDB's untimed original lyrics (AI listening can time them) */
+    vocadb: boolean;
   };
   spotify: {
     /** use the connected Spotify account (Web API) for exact track info and HD covers */
@@ -389,7 +391,7 @@ export const DEFAULT_SETTINGS: Settings = {
     openSettings: "CommandOrControl+Alt+S",
   },
   app: { autostart: false, tipShown: false, updateUrl: "", autoUpdateCheck: true, lastUpdateCheck: 0, batterySaver: true, lightMode: false, lightChecked: false, uiLanguage: "auto", screenReader: false, obs: false, obsPort: 7272 },
-  provider: { baseUrl: "https://lrclib.net/api", amll: true },
+  provider: { baseUrl: "https://lrclib.net/api", amll: true, vocadb: true },
   spotify: { enabled: false, clientId: "" },
   ai: { listen: false, captureLatencyMs: 0, isolateVocals: false, autoSync: true, pauseFullscreen: true, lyrics: true, whisperModel: "large-v3-turbo-q5_0", whisperRuntime: "auto", autoSyncWhen: "always", threads: 0, lowPriority: true, indicator: true, improveEachPlay: true, saveTraining: false, trainingDir: "", trainHours: 5, useTuned: true },
   debug: { overlay: false },

@@ -393,6 +393,7 @@ export const SECTIONS: Section[] = [
             ],
           },
           { kind: "toggle", path: "provider.amll", label: "Word-synced lyrics from the community database", help: "Checked when LRCLIB only has line timing." },
+          { kind: "toggle", path: "provider.vocadb", label: "Vocaloid lyrics from VocaDB", help: "Used when LRCLIB has nothing. They aren't timed: AI listening can time them." },
           { kind: "custom", id: "clear-cache", label: "Saved lyrics", help: "Clear to fetch fresh copies." },
           { kind: "text", path: "provider.baseUrl", label: "LRCLIB server", placeholder: "https://lrclib.net/api", adv: true },
         ],

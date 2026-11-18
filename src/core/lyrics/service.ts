@@ -7,6 +7,7 @@ import { lrclib } from "./lrclib";
 import type { LrclibRecord, Lyrics } from "./model";
 import { parseLrc, recordToLyrics, wordCoverage } from "./parse";
 import { amllToLyrics, findAmll, type AmllRecord } from "./amll";
+import { findVocaDbSong, vdbPlainText } from "./vocadb";
 import { getSettings } from "../settings/store";
 import { buildQueries, MIN_SCORE, normalize, scoreCandidate, type Query } from "./query";
 import { maybeAdLength } from "../playback/ads";
@@ -153,7 +154,25 @@ export async function loadLyrics(np: NowPlaying, force = false, lookup?: Partial
     await cache.set(key, entry);
     void prune();
   }
-  return fromLrclib;
+  return fromLrclib ?? (await fromVocaDb(np));
+}
+
+/**
+ * Nothing on LRCLIB / AMLL: VocaDB's original lyrics (Vocaloid / UTAU songs) as plain lyrics, which
+ * auto-sync can time from what MLP hears. VocaDB lookups are cached in vocadb-cache.json.
+ */
+async function fromVocaDb(np: NowPlaying): Promise<Lyrics | null> {
+  if (getSettings().provider?.vocadb === false || np.sourceKind === "mock") return null;
+  const q = buildQueries(np.title, np.artist, np.album)[0];
+  const title = q?.track || np.title;
+  const artist = q?.artist || np.artist;
+  const song = await findVocaDbSong(title, artist, np.durationMs).catch((e) => {
+    platform.log(`vocadb lyrics: ${e}`);
+    return null;
+  });
+  const plain = song && (vdbPlainText(song, artist) ?? (artist !== np.artist ? vdbPlainText(song, np.artist) : null));
+  if (!song || !plain) return null;
+  return { kind: "plain", lines: [], plain, source: "vocadb", id: song.id, trackName: song.name, artistName: song.artist, durationMs: np.durationMs };
 }
 
 /** Save (or clear) lyrics the user synced themselves; the lyrics window picks them up immediately. */

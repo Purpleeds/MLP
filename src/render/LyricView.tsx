@@ -1,5 +1,5 @@
 // Lyrics area: picks the state (loading / synced / plain / instrumental / none) and mounts the renderer.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { NowPlaying } from "../core/playback/clock";
 import { clock, mediaControl } from "../core/playback/nowPlaying";
 import type { Lyrics } from "../core/lyrics/model";
@@ -37,6 +37,7 @@ import { applySync, plainToLines } from "../core/ai/autosync";
 import { useAiLyrics } from "../core/ai/aiLyrics";
 import { useTrainingClip } from "../core/ai/training";
 import { AiLyricsMessage } from "./AiLyricsMessage";
+import { AiTimingNote } from "./AiTimingNote";
 import { noLyricsHint } from "../core/lyrics/instrumental";
 import { MOCK_TRACK } from "../core/mock/fixtures";
 import { LyricRenderer, type RendererOptions } from "./LyricRenderer";
@@ -159,7 +160,7 @@ function SyncedLyrics({
   return <div ref={host} className="lr-root" lang={lang} />;
 }
 
-function PlainLyrics({ text, durationMs, autoScroll }: { text: string; durationMs: number; autoScroll: boolean }) {
+function PlainLyrics({ text, durationMs, autoScroll, note }: { text: string; durationMs: number; autoScroll: boolean; note?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const userAt = useRef(0);
   useEffect(() => {
@@ -172,11 +173,20 @@ function PlainLyrics({ text, durationMs, autoScroll }: { text: string; durationM
     }, 1000);
     return () => clearInterval(id);
   }, [durationMs, autoScroll]);
-  return (
+  const body = (
     <div ref={ref} className="lr-plain" lang={detectLang(text)} onWheel={() => (userAt.current = performance.now())}>
-      <p className="lr-plain-note">These lyrics aren't time-synced.</p>
+      {!note && <p className="lr-plain-note">These lyrics aren't time-synced.</p>}
       {text}
     </div>
+  );
+  // A note with a button stays in view above the scrolling text.
+  return note ? (
+    <div className="lr-plain-box">
+      {note}
+      {body}
+    </div>
+  ) : (
+    body
   );
 }
 
@@ -212,15 +222,20 @@ function Loading() {
   );
 }
 
-/** Plain lyrics: auto-sync lines them up in the background; once lines are found they're shown synced. */
+/**
+ * Plain lyrics (LRCLIB / VocaDB without timing): auto-sync lines them up with what MLP hears; once lines
+ * are found they're shown synced. Until then a note says how it goes, or offers to turn AI timing on.
+ */
 function PlainWithSync({ lyrics, np, variant }: { lyrics: Lyrics; np: NowPlaying; variant: LyricVariant }) {
   const s = useSettings();
   const lines = useMemo(() => plainToLines(lyrics), [lyrics]);
-  const enabled = s.ai.autoSync && isTauri() && lines.lines.length > 0;
-  useAutoSync(enabled ? np : null, lines, enabled);
+  // The engine runs even with auto-sync / listening off: it reports what's missing for the button.
+  const can = isTauri() && lines.lines.length > 0 && np.sourceKind !== "mock";
+  useAutoSync(can ? np : null, lines, can);
+  const enabled = can && s.ai.autoSync;
   const sync = useSyncView(enabled ? lines : null);
   useTrainingClip(np, lines, sync, 0, enabled);
-  if (!sync) return <PlainLyrics text={lyrics.plain ?? ""} durationMs={np.durationMs || lyrics.durationMs} autoScroll={s.lyrics.plainAutoScroll} />;
+  if (!sync) return <PlainLyrics text={lyrics.plain ?? ""} durationMs={np.durationMs || lyrics.durationMs} autoScroll={s.lyrics.plainAutoScroll} note={can ? <AiTimingNote /> : undefined} />;
   return <Timed lyrics={lines} np={np} variant={variant} external />;
 }
 

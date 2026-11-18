@@ -349,3 +349,31 @@ export function humanTranslation(
   }
   return best;
 }
+
+// ---------- untimed lyrics ----------
+/** Inline furigana right after kanji ("磊々落々（らいらいらくらく）") isn't sung twice: drop it. */
+const noFurigana = (s: string) => s.replace(/(?<=[\p{Script=Han}々〆ヶ])[（(][\p{Script=Hiragana}\p{Script=Katakana}ー・\s]+[）)]/gu, "");
+
+/** The VocaDB song is by the playing artist (producer, singer or a featured voice). */
+export function artistMatches(song: Pick<VdbSong, "artist">, artist: string): boolean {
+  const want = cleanArtist(artist);
+  if (!want.trim()) return false;
+  return artistNames(song.artist).some((n) => similarity(n, want) >= 0.6);
+}
+
+/**
+ * VocaDB's original lyrics as plain (untimed) text — used when LRCLIB has nothing, so auto-sync can
+ * time real lyrics instead of AI writing new ones. null unless the artist matches too (the title search
+ * alone could pick another song with the same name).
+ */
+export function vdbPlainText(song: VdbSong, artist: string): string | null {
+  if (!artistMatches(song, artist)) return null;
+  const orig = song.lyrics.find((l) => l.type === "Original");
+  if (!orig) return null;
+  const text = vdbLines(orig.text)
+    .map(noFurigana)
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return /\p{L}/u.test(text) ? text : null;
+}

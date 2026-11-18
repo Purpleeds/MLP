@@ -3,13 +3,15 @@
 // per song (a readable file in <app data>\ai\timing\, see timingFiles.ts) and tells the lyric view, the debug overlay and Settings how it goes.
 import { useEffect, useSyncExternalStore } from "react";
 import { isTauri, platform } from "../platform";
-import { getSettings } from "../settings/store";
+import { getSettings, updateSettings } from "../settings/store";
 import { DEFAULT_SETTINGS } from "../settings/schema";
 import { trackKey, type NowPlaying } from "../playback/clock";
 import type { Lyrics } from "../lyrics/model";
 import { songKey } from "../lyrics/service";
 import { loadTiming, removeTiming, saveTiming, type SongId } from "./timingFiles";
 import { romanizeLyrics, type RomanOptions } from "../romanize";
+import { downloadInfo, missingAligner, sizeText, type AssetInfo } from "./transcribe";
+import { aiStatus, downloadAssets } from "./setup";
 import { anchorsOf, dropOutliers, fitMap, IDENTITY, lyricsSig, nextSequential, nextWindow, syncLines, toFix, type LineFix, type SyncLine, type TimeMap, type WordTime } from "./autosync";
 
 export interface SyncView {
@@ -32,6 +34,10 @@ export interface SyncStatus {
   /** tempo / offset of the time map */
   tempo?: number;
   offsetMs?: number;
+  /** what's missing before lines can be timed: auto-sync / listening is off, or the aligner isn't downloaded */
+  need?: "turn-on" | "download";
+  /** what's left to download (aligner model) and how big it is */
+  download?: { ids: string[]; mb: number; busy: boolean };
 }
 
 /** Romanization used for alignment: always on, plain letters (independent of the display settings). */
@@ -126,12 +132,35 @@ interface Coverage {
   isolated?: [number, number][];
 }
 
+/** Last look at whether the aligner model is on this PC (complete stays complete). */
+let aligner: { at: number; missing: AssetInfo[] } | null = null;
+let setupBusy = false;
+
+async function missingNow(): Promise<AssetInfo[]> {
+  // Missing is looked at again now and then: Settings (or the lyric view's button) may be downloading it.
+  const again = aligner?.missing.some((a) => a.downloading) ? 3_000 : 20_000;
+  if (aligner && (!aligner.missing.length || Date.now() - aligner.at < again)) return aligner.missing;
+  const st = await aiStatus();
+  aligner = { at: Date.now(), missing: st ? missingAligner(st.assets) : [] };
+  return aligner.missing;
+}
+
 async function tick() {
   if (busy || !ctx || !view || !own()) return;
   const s = getSettings();
-  if (!s.ai.autoSync) return setStatus({ phase: "off", detail: "Auto-sync is off." });
   if (!isTauri()) return setStatus({ phase: "off", detail: "Available in the app." });
-  if (!s.ai.listen) return setStatus({ phase: "off", detail: "Turn on “Listen to the player” to line lyrics up." });
+  if (setupBusy || (status.phase === "error" && status.need)) return; // a failed download stays on screen until "Try again"
+  const my0 = gen;
+  const missing = await missingNow();
+  if (my0 !== gen || !own()) return;
+  const download = downloadInfo(missing);
+  if (!s.ai.autoSync) return setStatus({ phase: "off", detail: "Auto-sync is off.", need: "turn-on", download });
+  if (!s.ai.listen) return setStatus({ phase: "off", detail: "Turn on “Listen to the player” to line lyrics up.", need: "turn-on", download });
+  if (download) {
+    const detail = download.busy ? "Downloading the auto-sync model…" : `The auto-sync model isn't downloaded yet (${sizeText(download.mb)}, once).`;
+    return setStatus({ phase: "off", need: "download", download, detail });
+  }
+  if (status.need) setStatus({ need: undefined, download: undefined });
   if (s.ai.autoSyncWhen === "line" && ctx.lyrics.kind === "word") return setStatus({ phase: "done", detail: "Word-synced lyrics aren't checked (setting)." });
   if (s.ai.autoSyncWhen === "off" && inTime(view)) return setStatus({ phase: "done", detail: "These lyrics are in time — stopped checking." });
   if (view.lines.length && countFixes() === view.lines.length) return setStatus({ phase: "done", detail: "Every line is lined up." });
@@ -220,9 +249,10 @@ async function start(np: NowPlaying, lyrics: Lyrics) {
   publishView({ for: lyrics, lines, fixes: saved, map: fitMap(anchorsOf(lines, saved)) });
   // Timing from an older version (songs.json): move it into a file now.
   if (stored?.legacy) void writeNow();
-  setStatus({ phase: "idle", detail: "" });
+  if (!setupBusy) setStatus({ phase: "idle", detail: "", need: undefined, download: undefined });
   clearInterval(timer);
   timer = window.setInterval(() => void tick(), TICK_MS);
+  void tick();
 }
 
 function flushSave() {
@@ -242,7 +272,8 @@ function stop() {
   ctx = null;
   clearInterval(timer);
   timer = 0;
-  setStatus({ phase: "off", detail: "", aligned: 0, total: 0 });
+  if (!setupBusy) setStatus({ phase: "off", detail: "", aligned: 0, total: 0, need: undefined, download: undefined });
+  else setStatus({ aligned: 0, total: 0 });
 }
 
 let bridged = false;
@@ -288,6 +319,29 @@ export function useSyncView(lyrics: Lyrics | null): SyncView | null {
   return v && lyrics && v.for === lyrics && Object.keys(v.fixes).length ? v : null;
 }
 export const useSyncStatus = () => useSyncExternalStore(subscribe, () => status);
+
+/**
+ * Lyric view button ("Time with AI"): turn on listening and auto-sync and download the aligner model
+ * if it's missing. Progress shows in the status; the engine picks up on its next tick.
+ */
+export async function setUpAutoSync(): Promise<void> {
+  if (setupBusy) return;
+  setupBusy = true;
+  try {
+    if (!getSettings().ai.listen) await updateSettings("ai.listen", true);
+    if (!getSettings().ai.autoSync) await updateSettings("ai.autoSync", true);
+    const st = await aiStatus();
+    const missing = st ? missingAligner(st.assets) : [];
+    if (missing.length) await downloadAssets(missing, (detail) => setStatus({ phase: "off", need: "download", detail }));
+    aligner = null;
+    setStatus({ phase: "listening", need: undefined, download: undefined, detail: "Listening…" });
+  } catch (e) {
+    aligner = null;
+    setStatus({ phase: "error", need: "download", detail: `Download failed: ${e}` });
+  } finally {
+    setupBusy = false;
+  }
+}
 
 /** Settings: forget the AI timing saved for a song (its file; the main window drops it too). */
 export async function forgetAutoSync(np: SongId) {

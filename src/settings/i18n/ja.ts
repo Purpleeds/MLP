@@ -269,6 +269,8 @@ export const ja: Record<string, string> = {
   "Lyrics source": "歌詞の取得元",
   "LRCLIB server": "LRCLIB サーバー",
   "Word-synced lyrics from the community database": "コミュニティ DB の単語同期歌詞",
+  "Vocaloid lyrics from VocaDB": "VocaDB のボカロ歌詞",
+  "Used when LRCLIB has nothing. They aren't timed: AI listening can time them.": "LRCLIB に何もないときに使います。タイミングはないので、AI リスニングで合わせられます。",
   "When LRCLIB only has line timing, also check the AMLL TTML database (looks the song up on iTunes, then GitHub).":
     "LRCLIB に行単位のタイミングしかない場合、AMLL TTML DB も確認します（iTunes で曲を探し、GitHub から取得）。",
   "Saved lyrics": "保存した歌詞",

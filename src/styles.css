@@ -849,6 +849,45 @@ img.bg-art.spin {
   font-weight: 500;
   opacity: 0.55;
 }
+/* Plain lyrics waiting for AI timing: the note stays above the scrolling text. */
+.lr-plain-box {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+.lr-plain-box > .lr-plain {
+  position: relative;
+  inset: auto;
+  flex: 1;
+  min-height: 0;
+  padding-top: 4px;
+}
+.lr-timing-note {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  padding: 8px var(--pad) 4px;
+  line-height: 1.4;
+  opacity: 1;
+}
+.lr-timing-note > span:first-child {
+  opacity: 0.6;
+}
+.lr-timing-note .lr-message-action {
+  margin: 0;
+}
+.lr-timing-note .lr-ai-btn {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+.mode-bar .lr-timing-note,
+.mode-mini .lr-timing-note {
+  display: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .lr-loading span,

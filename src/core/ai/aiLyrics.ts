@@ -10,9 +10,10 @@ import { trackKey, type NowPlaying } from "../playback/clock";
 import type { LyricLine, Lyrics } from "../lyrics/model";
 import { songKey, songs } from "../lyrics/service";
 import { removeTiming, type SongId } from "./timingFiles";
-import { detectedLanguage, filterSegments, missingWhisper, nextChunk, segmentsFrom, segmentsToLines, settle, sizeText, type AssetInfo, type WhisperJson } from "./transcribe";
+import { detectedLanguage, downloadInfo, filterSegments, missingWhisper, nextChunk, segmentsFrom, segmentsToLines, settle, sizeText, type AssetInfo, type WhisperJson } from "./transcribe";
 import { addHandFixes, canSkip, handFixes, lockedShare, MAX_PASSES, mergePasses, settled, type AiLine, type AiPass, type HandFix } from "./passes";
 import { tunedModelFor } from "./training";
+import { aiStatus, downloadAssets } from "./setup";
 
 /** Version 1 (one transcript per song, before plays were merged). */
 interface SavedAiLyricsV1 {
@@ -128,13 +129,10 @@ async function missingNow(runtime: string, model: string): Promise<AssetInfo[]> 
   const key = `${runtime}/${model}`;
   // Complete stays complete; missing is looked at again every 5 s (Settings may be downloading).
   if (assets?.key === key && (!assets.missing.length || Date.now() - assets.at < 5_000)) return assets.missing;
-  const st = await platform.invoke<{ gpu: string | null; assets: AssetInfo[] }>("ai_status").catch(() => undefined);
+  const st = await aiStatus();
   assets = { key, at: Date.now(), missing: st ? missingWhisper(st.assets, st.gpu, runtime, model) : [] };
   return assets.missing;
 }
-
-const downloadInfo = (missing: AssetInfo[]) =>
-  missing.length ? { ids: missing.map((a) => a.id), mb: missing.reduce((n, a) => n + a.sizeMb, 0), busy: missing.some((a) => a.downloading) } : undefined;
 
 /**
  * Lyric view button: turn on listening and download whatever Whisper still needs, so AI lyrics can
@@ -144,32 +142,15 @@ export async function setUpAiLyrics(): Promise<void> {
   if (setupBusy) return;
   if (!getSettings().ai.listen) await updateSettings("ai.listen", true);
   const s = getSettings();
-  const st = await platform.invoke<{ gpu: string | null; assets: AssetInfo[] }>("ai_status").catch(() => undefined);
+  const st = await aiStatus();
   const missing = st ? missingWhisper(st.assets, st.gpu, s.ai.whisperRuntime, s.ai.whisperModel) : [];
   if (!missing.length) {
     setStatus({ phase: "listening", need: undefined, download: undefined, detail: "Listening…" });
     return;
   }
   setupBusy = true;
-  const waiting = new Map<string, { ok: () => void; fail: (e: string) => void }>();
-  const off = await platform.on<{ id: string; received: number; total: number; done: boolean; error: string | null }>("ai-download", (p) => {
-    const a = missing.find((m) => m.id === p.id);
-    if (!a) return;
-    if (p.done) waiting.get(p.id)?.ok();
-    else if (p.error) waiting.get(p.id)?.fail(p.error);
-    else if (p.total) setStatus({ phase: "off", need: "download", detail: `Downloading ${a.name}… ${Math.round((p.received / p.total) * 100)} %` });
-  });
   try {
-    for (const a of missing) {
-      setStatus({ phase: "off", need: "download", detail: `Downloading ${a.name}…` });
-      const finished = new Promise<void>((ok, fail) => waiting.set(a.id, { ok, fail }));
-      finished.catch(() => undefined); // only awaited when Settings already started it
-      // Already downloading (started in Settings): wait for that download to finish.
-      await platform.invoke("ai_download", { id: a.id }).catch((e) => {
-        if (String(e).includes("already downloading")) return finished;
-        throw e;
-      });
-    }
+    await downloadAssets(missing, (detail) => setStatus({ phase: "off", need: "download", detail }));
     assets = null;
     setStatus({ phase: "listening", need: undefined, download: undefined, detail: "Listening…" });
   } catch (e) {
@@ -177,7 +158,6 @@ export async function setUpAiLyrics(): Promise<void> {
     setStatus({ phase: "error", need: "download", detail: `Download failed: ${e}` });
   } finally {
     setupBusy = false;
-    off();
   }
 }
 

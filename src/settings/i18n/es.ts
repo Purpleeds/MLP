@@ -269,6 +269,8 @@ export const es: Record<string, string> = {
   "Lyrics source": "Origen de las letras",
   "LRCLIB server": "Servidor LRCLIB",
   "Word-synced lyrics from the community database": "Letras sincronizadas por palabra de la base comunitaria",
+  "Vocaloid lyrics from VocaDB": "Letras de Vocaloid de VocaDB",
+  "Used when LRCLIB has nothing. They aren't timed: AI listening can time them.": "Se usan cuando LRCLIB no tiene nada. No están sincronizadas: la escucha con IA puede sincronizarlas.",
   "When LRCLIB only has line timing, also check the AMLL TTML database (looks the song up on iTunes, then GitHub).":
     "Si LRCLIB solo tiene tiempos por línea, consulta también la base AMLL TTML (busca la canción en iTunes y luego en GitHub).",
   "Saved lyrics": "Letras guardadas",

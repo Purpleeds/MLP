@@ -213,5 +213,15 @@ export function missingWhisper(assets: AssetInfo[], gpu: string | null, runtime:
   return [engine, find(model)].filter((a): a is AssetInfo => !!a && !a.installed);
 }
 
+/** Auto-sync's aligner model when it isn't on this PC yet ([] = ready). */
+export const ALIGNER_ID = "mms-aligner";
+export function missingAligner(assets: AssetInfo[]): AssetInfo[] {
+  return assets.filter((a) => a.id === ALIGNER_ID && !a.installed);
+}
+
+/** How much a set of missing files is to download (undefined = nothing missing). */
+export const downloadInfo = (missing: AssetInfo[]) =>
+  missing.length ? { ids: missing.map((a) => a.id), mb: missing.reduce((n, a) => n + a.sizeMb, 0), busy: missing.some((a) => a.downloading) } : undefined;
+
 /** Download size for people: "148 MB", "1.3 GB". */
 export const sizeText = (mb: number) => (mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${Math.round(mb)} MB`);

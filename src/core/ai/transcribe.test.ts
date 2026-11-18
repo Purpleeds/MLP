@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectedLanguage, filterSegments, isLoop, missingWhisper, nextChunk, segmentsFrom, segmentsToLines, settle, type AssetInfo, type Seg } from "./transcribe";
+import { detectedLanguage, downloadInfo, filterSegments, isLoop, missingAligner, missingWhisper, nextChunk, segmentsFrom, segmentsToLines, settle, type AssetInfo, type Seg } from "./transcribe";
 
 const seg = (start: number, end: number, text: string, extra: Partial<Seg> = {}): Seg => ({ start, end, text, words: [], avgLogprob: -0.2, noSpeech: 0.01, ...extra });
 
@@ -80,5 +80,18 @@ describe("missingWhisper", () => {
     const assets = [asset("whisper-cuda", false), asset("whisper-cpu", true), asset("base", true), asset("large-v3-turbo-q5_0", false)];
     expect(ids(missingWhisper(assets, "RTX", "auto", "base"))).toEqual([]);
     expect(ids(missingWhisper(assets, "RTX", "auto", "large-v3-turbo-q5_0"))).toEqual(["large-v3-turbo-q5_0"]);
+  });
+});
+
+describe("missingAligner", () => {
+  const asset = (id: string, installed: boolean, sizeMb = 100, downloading = false): AssetInfo => ({ id, name: id, installed, downloading, sizeMb });
+
+  it("asks only for the auto-sync model, and only when it isn't there", () => {
+    const fresh = [asset("whisper-cuda", false), asset("mms-aligner", false, 317), asset("htdemucs-vocals", false)];
+    expect(missingAligner(fresh).map((a) => a.id)).toEqual(["mms-aligner"]);
+    expect(downloadInfo(missingAligner(fresh))).toEqual({ ids: ["mms-aligner"], mb: 317, busy: false });
+    expect(missingAligner([asset("mms-aligner", true)])).toEqual([]);
+    expect(downloadInfo([])).toBeUndefined();
+    expect(downloadInfo([asset("mms-aligner", false, 317, true)])?.busy).toBe(true);
   });
 });

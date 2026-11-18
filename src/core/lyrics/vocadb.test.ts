@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignToVdb, findVocaDbSong, humanTranslation, pairTranslation, romajiKey, scoreSong, vdbLines, type FetchJson, type VdbSong } from "./vocadb";
+import { alignToVdb, artistMatches, findVocaDbSong, vdbPlainText, humanTranslation, pairTranslation, romajiKey, scoreSong, vdbLines, type FetchJson, type VdbSong } from "./vocadb";
 
 // Shaped like VocaDB's real 千本桜 entry (id 8394): inline furigana, full-width spaces, trailing spaces.
 const ORIGINAL =
@@ -186,5 +186,33 @@ describe("vocadb romaji bridge", () => {
     const h = humanTranslation(song, shown, "en")!;
     expect(h.coverage).toBeGreaterThanOrEqual(0.6);
     expect(h.lines[0]).toBe("It was you who said goodbye");
+  });
+});
+
+describe("VocaDB untimed lyrics", () => {
+  it("gives the original lyrics without furigana when the artist matches", () => {
+    const text = vdbPlainText(SONG, "黒うさP")!;
+    expect(text.split("\n")[1]).toBe("磊々落々反戦国家");
+    expect(text).toContain("浮世の随に");
+    expect(text).not.toMatch(/（/);
+    expect(text).toContain("\n\n"); // stanza breaks kept
+    expect(text.startsWith("大胆不敵にハイカラ革命")).toBe(true);
+  });
+
+  it("matches the singer or producer, not another artist with a song of the same name", () => {
+    expect(artistMatches(SONG, "初音ミク")).toBe(true);
+    expect(artistMatches(SONG, "Kurousa-P feat. Hatsune Miku")).toBe(false); // romanized names aren't guessed
+    expect(vdbPlainText(SONG, "Some Rock Band")).toBeNull();
+    expect(vdbPlainText(SONG, "")).toBeNull();
+  });
+
+  it("drops furigana after kanji but keeps kana lines in parentheses (backing vocals)", () => {
+    const song: VdbSong = { ...SONG, lyrics: [{ type: "Original", langs: ["ja"], source: "", url: "", text: "君の声（ねえ）\n(ららら)" }] };
+    expect(vdbPlainText(song, "初音ミク")).toBe("君の声\n(ららら)");
+  });
+
+  it("no original lyrics → nothing", () => {
+    const song: VdbSong = { ...SONG, lyrics: SONG.lyrics.filter((l) => l.type !== "Original") };
+    expect(vdbPlainText(song, "初音ミク")).toBeNull();
   });
 });

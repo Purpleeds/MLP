@@ -33,8 +33,8 @@ export interface Lyrics {
   lines: LyricLine[];
   /** unsynced text for kind "plain" */
   plain?: string;
-  /** ai = written by Whisper from the captured audio (Step 16) */
-  source: "lrclib" | "amll" | "local" | "ai";
+  /** ai = written by Whisper from the captured audio (Step 16); vocadb = VocaDB's untimed original lyrics */
+  source: "lrclib" | "amll" | "local" | "ai" | "vocadb";
   id: number;
   trackName: string;
   artistName: string;
